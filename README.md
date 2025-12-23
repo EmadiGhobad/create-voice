@@ -400,6 +400,174 @@ This will show you:
 - Numbered samples
 - LibriTTS dataset samples
 
+## Adding Your Own Voice (Zero-Shot Voice Cloning)
+
+StyleTTS2 supports **zero-shot voice cloning**, which means you can clone voices with just a few seconds of audio - no 30-minute training required! Unlike traditional TTS cloud platforms that need extensive fine-tuning, StyleTTS2 extracts voice characteristics directly from a short reference sample.
+
+### How It Works
+
+StyleTTS2 uses reference audio to extract:
+- **Timbre** (voice characteristics - who is speaking)
+- **Prosody** (speaking style - how they speak)
+
+The similarity to your reference voice depends on:
+1. **Reference audio quality and length**
+2. **Alpha/Beta parameters** (control how closely to match the reference)
+
+### Reference Audio Requirements
+
+**Minimum requirements:**
+- Format: WAV
+- Duration: At least 4-5 seconds of clear speech
+- Sample rate: 24000 Hz (auto-resampled if different)
+- Quality: Clear speech with minimal background noise
+
+**Recommended for best results:**
+- Duration: 10-30 seconds (longer is better, but not required)
+- Natural, conversational speech
+- Single speaker (no overlapping voices)
+- Minimal background noise
+
+### Voice Cloning vs. Voice Similarity
+
+StyleTTS2 can produce voices that are:
+- **Very similar** (close to cloning) with `alpha=0.0, beta=0.0`
+- **Similar with variation** (recommended) with `alpha=0.1-0.3, beta=0.2-0.4`
+- **Loosely inspired** with higher alpha/beta values
+
+**Note:** It's not perfect cloning, but can achieve very high similarity with good reference audio and proper settings.
+
+### Examples
+
+**Maximum similarity (closest to cloning):**
+```bash
+DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
+python inference_local.py \
+  --text "This will sound very similar to my voice" \
+  --reference /path/to/your_voice.wav \
+  --alpha 0.0 \      # 100% reference timbre (voice characteristics)
+  --beta 0.0 \       # 100% reference prosody (speaking style)
+  --steps 20 \       # Higher quality
+  --output cloned_voice.wav
+```
+
+**Similar with natural variation (recommended):**
+```bash
+DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
+python inference_local.py \
+  --text "This will sound like me but with some natural variation" \
+  --reference /path/to/your_voice.wav \
+  --alpha 0.1 \      # 90% reference timbre, 10% variation
+  --beta 0.2 \       # 80% reference prosody, 20% variation
+  --steps 20 \
+  --output similar_voice.wav
+```
+
+**Using a custom voice from anywhere:**
+```bash
+# You can use any WAV file on your system
+DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
+python inference_local.py \
+  --text "Hello, this is my custom voice!" \
+  --reference ~/Downloads/my_voice_sample.wav \
+  --output custom_output.wav
+```
+
+### Common Alpha/Beta Combinations
+
+**100% reference timbre, 0% reference prosody** (your voice, but with generated speaking style):
+```bash
+DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
+python inference_local.py \
+  --text "This uses your exact voice but with generated prosody" \
+  --reference /path/to/your_voice.wav \
+  --alpha 0.0 \      # 100% reference timbre (your voice)
+  --beta 1.0 \       # 0% reference prosody (generated speaking style)
+  --steps 20 \
+  --output voice_only.wav
+```
+
+**0% reference timbre, 100% reference prosody** (different voice, but same speaking style):
+```bash
+DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
+python inference_local.py \
+  --text "This uses generated voice but your speaking style" \
+  --reference /path/to/your_voice.wav \
+  --alpha 1.0 \      # 0% reference timbre (generated voice)
+  --beta 0.0 \       # 100% reference prosody (your speaking style)
+  --steps 20 \
+  --output prosody_only.wav
+```
+
+**100% reference timbre, 100% reference prosody** (maximum cloning):
+```bash
+DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
+python inference_local.py \
+  --text "This is closest to perfect cloning" \
+  --reference /path/to/your_voice.wav \
+  --alpha 0.0 \      # 100% reference timbre
+  --beta 0.0 \       # 100% reference prosody
+  --steps 20 \
+  --output cloned.wav
+```
+
+**Parameter Reference:**
+- `alpha`: Controls **timbre** (voice characteristics)
+  - `0.0` = 100% reference timbre
+  - `1.0` = 0% reference timbre (fully generated)
+- `beta`: Controls **prosody** (speaking style)
+  - `0.0` = 100% reference prosody
+  - `1.0` = 0% reference prosody (fully generated)
+
+### Removing Accent and Speaking Style
+
+If you want to keep your voice but remove your accent and speaking style:
+
+```bash
+DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
+python inference_local.py \
+  --text "This uses your voice but with generated prosody (no accent/style)" \
+  --reference /path/to/your_voice.wav \
+  --alpha 0.0 \      # 100% reference timbre (your voice)
+  --beta 1.0 \       # 0% reference prosody (generated, removes accent/style)
+  --steps 20 \
+  --output voice_no_accent.wav
+```
+
+**How it works:**
+- **Accent** and **speaking style** are both part of **prosody** (how you speak)
+- By setting `beta = 1.0`, you use generated prosody instead of your reference prosody
+- This should reduce or remove your accent and speaking style while keeping your voice timbre
+
+**Important limitations:**
+- **Not perfect accent removal**: The model was trained on LibriTTS (English dataset), so it may still have some accent bias from the training data
+- **Pronunciation**: Uses espeak-ng for phonemization, which handles standard pronunciation, but generated prosody may still reflect training patterns
+- **Result**: Your voice with generated prosody - should sound less accented than your reference, but may not be completely neutral
+
+**For best results:**
+- Use clear, high-quality reference audio
+- Try different `beta` values (0.8-1.0) to find the right balance
+- Increase `steps` (20-30) for better quality
+- The generated prosody will be influenced by the model's training data (LibriTTS English speakers)
+
+### Tips for Best Results
+
+1. **Record clear audio**: Use a good microphone in a quiet environment
+2. **Speak naturally**: Don't over-enunciate or speak unnaturally
+3. **Use longer samples**: 10-30 seconds gives better results than 4-5 seconds
+4. **Match the emotion**: If you want emotional speech, use reference audio with that emotion
+5. **Experiment with parameters**: Try different alpha/beta values to find the best balance
+
+### Comparison with Cloud TTS Platforms
+
+| Feature | StyleTTS2 | Traditional Cloud TTS |
+|---------|-----------|----------------------|
+| **Training time** | None (zero-shot) | 30+ minutes |
+| **Reference audio needed** | 4-30 seconds | 30+ minutes |
+| **Voice similarity** | Very similar to similar | Perfect cloning |
+| **Setup** | Local, free | Cloud, paid |
+| **Privacy** | Fully local | Data sent to cloud |
+
 ## Project Structure
 
 ```
