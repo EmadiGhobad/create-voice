@@ -1,0 +1,38 @@
+# StyleTTS2 Requirements
+# Install these in your Python environment
+
+# Core dependencies
+torch>=1.9.0
+torchaudio>=0.9.0
+numpy>=1.19.0
+scipy>=1.5.0
+
+# Audio processing
+SoundFile>=0.10.0
+librosa>=0.8.0
+pydub>=0.24.0
+
+# Text processing
+nltk>=3.6.0
+phonemizer>=3.0.0
+
+# Configuration
+pyyaml>=5.4.0
+munch>=2.5.0
+
+# Utilities
+matplotlib>=3.3.0
+tqdm>=4.60.0
+
+# ML/AI
+transformers>=4.0.0
+accelerate>=0.5.0
+einops>=0.3.0
+einops-exts>=0.0.4
+
+# Additional dependencies
+typing-extensions>=4.0.0
+
+# Note: monotonic_align needs to be installed from git:
+# pip install git+https://github.com/resemble-ai/monotonic_align.git
+
