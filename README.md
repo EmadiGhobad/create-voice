@@ -130,6 +130,92 @@ python inference_local.py \
   --reference StyleTTS2/Demo/reference_audio/1221-135767-0014.wav
 ```
 
+#### Combine Speaker Voice with Emotion
+
+You can combine a specific speaker's voice with an emotion! This allows you to have, for example, Gavin's voice speaking with an amused tone, or Nima's voice with anger.
+
+**How it works:**
+- `--reference`: Sets the speaker's voice (timbre/identity)
+- `--emotion`: Sets the emotion/prosody (how they speak)
+- The system keeps the speaker's voice but applies the emotion's prosody
+
+**Basic usage:**
+```bash
+# Use Gavin's voice with an amused emotion
+DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
+python inference_local.py \
+  --text "That's absolutely hilarious!" \
+  --reference StyleTTS2/Demo/reference_audio/Gavin.wav \
+  --emotion StyleTTS2/Demo/reference_audio/amused.wav
+```
+
+**Available emotions:**
+- `amused.wav` - Cheerful, amused tone
+- `anger.wav` - Angry, aggressive tone
+- `disgusted.wav` - Disgusted, repulsed tone
+- `sleepy.wav` - Tired, sleepy tone
+
+**Control emotion strength:**
+Use `--emotion-blend` to control how much emotion is applied. **Default: 0.7** (70% emotion prosody, 30% speaker prosody). Range: 0.0-1.0.
+
+**Note:** If you use `--emotion` without specifying `--emotion-blend`, it defaults to 0.7, meaning the output will use 70% of the emotion's prosody and 30% of the speaker's natural prosody, while keeping the speaker's voice timbre.
+
+```bash
+# Subtle emotion (20% emotion blend)
+DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
+python inference_local.py \
+  --text "That's interesting." \
+  --reference StyleTTS2/Demo/reference_audio/Gavin.wav \
+  --emotion StyleTTS2/Demo/reference_audio/amused.wav \
+  --emotion-blend 0.2
+
+# Strong emotion (90% emotion blend)
+DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
+python inference_local.py \
+  --text "I'm absolutely furious!" \
+  --reference StyleTTS2/Demo/reference_audio/Nima.wav \
+  --emotion StyleTTS2/Demo/reference_audio/anger.wav \
+  --emotion-blend 0.9
+```
+
+**More examples:**
+```bash
+# Nima with anger
+DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
+python inference_local.py \
+  --text "I can't believe you did that!" \
+  --reference StyleTTS2/Demo/reference_audio/Nima.wav \
+  --emotion StyleTTS2/Demo/reference_audio/anger.wav \
+  --output nima_angry.wav
+
+# Vinay with sleepy tone
+DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
+python inference_local.py \
+  --text "I'm so tired, I need to rest now." \
+  --reference StyleTTS2/Demo/reference_audio/Vinay.wav \
+  --emotion StyleTTS2/Demo/reference_audio/sleepy.wav \
+  --output vinay_sleepy.wav
+
+# Yinghao with disgusted emotion
+DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
+python inference_local.py \
+  --text "That's absolutely revolting!" \
+  --reference StyleTTS2/Demo/reference_audio/Yinghao.wav \
+  --emotion StyleTTS2/Demo/reference_audio/disgusted.wav \
+  --output yinghao_disgusted.wav
+
+# High quality emotional speech
+DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
+python inference_local.py \
+  --text "This is amazing!" \
+  --reference StyleTTS2/Demo/reference_audio/Gavin.wav \
+  --emotion StyleTTS2/Demo/reference_audio/amused.wav \
+  --emotion-blend 0.8 \
+  --steps 20 \
+  --embedding-scale 1.5 \
+  --output high_quality_emotional.wav
+```
+
 #### Adjust Voice Characteristics
 
 Control how similar the synthesized voice is to the reference speaker:
@@ -162,7 +248,9 @@ python inference_local.py --help
 
 Available options:
 - `--text TEXT`: Text to synthesize (default: test sentence)
-- `--reference REFERENCE`: Path to reference audio file (default: first WAV found)
+- `--reference REFERENCE`: Path to reference audio file for speaker voice (default: first WAV found)
+- `--emotion EMOTION`: Path to reference audio file for emotion/prosody (optional, blends with --reference)
+- `--emotion-blend BLEND`: Emotion blend ratio: 0=only speaker prosody, 1=only emotion prosody (default: 0.7 = 70% emotion, 30% speaker)
 - `--output OUTPUT`: Output audio file path (default: `output.wav`)
 - `--alpha ALPHA`: Timbre control: 0=reference, 1=sampled (default: 0.3)
 - `--beta BETA`: Prosody control: 0=reference, 1=sampled (default: 0.7)
@@ -217,6 +305,26 @@ python inference_local.py \
   --embedding-scale 2.0 \
   --steps 10 \
   --output emotional.wav
+
+# Example 6: Speaker voice with emotion
+# Combine Gavin's voice with an amused emotion
+DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
+python inference_local.py \
+  --text "That's absolutely hilarious!" \
+  --reference StyleTTS2/Demo/reference_audio/Gavin.wav \
+  --emotion StyleTTS2/Demo/reference_audio/amused.wav \
+  --output gavin_amused.wav
+
+# Example 7: Strong emotion with specific speaker
+# Nima's voice with strong anger emotion
+DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
+python inference_local.py \
+  --text "I'm absolutely furious about this!" \
+  --reference StyleTTS2/Demo/reference_audio/Nima.wav \
+  --emotion StyleTTS2/Demo/reference_audio/anger.wav \
+  --emotion-blend 0.9 \
+  --steps 15 \
+  --output nima_angry.wav
 ```
 
 ### Best Settings for Human-Like Quality
@@ -278,14 +386,30 @@ The `inference()` function accepts several parameters:
 - Uses 100% of reference timbre and prosody
 - Very similar to reference, no variation
 
+## Listing Available Speakers
+
+To see all available reference audio files (speakers and emotions), run:
+
+```bash
+python list_speakers.py
+```
+
+This will show you:
+- Named speakers (Gavin, Nima, Vinay, Yinghao)
+- Emotion samples (amused, anger, disgusted, sleepy)
+- Numbered samples
+- LibriTTS dataset samples
+
 ## Project Structure
 
 ```
 create-voice/
 ├── setup.sh                 # Setup script
 ├── inference_local.py       # Main inference script
+├── list_speakers.py         # List available speakers/emotions
 ├── requirements.txt         # Python dependencies
 ├── README.md               # This file
+├── EMOTION_EXAMPLES.md     # Detailed emotion usage examples
 ├── FIX_INSTRUCTIONS.md     # Fix for NaN errors
 ├── inference_fix.py        # Helper functions for fixes
 └── StyleTTS2/             # Cloned StyleTTS2 repository

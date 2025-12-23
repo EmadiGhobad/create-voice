@@ -250,7 +250,11 @@ def main():
                        default="Hello, this is a test of StyleTTS2 text to speech synthesis.",
                        help='Text to synthesize (default: test sentence)')
     parser.add_argument('--reference', type=str, default=None,
-                       help='Path to reference audio file (default: first WAV file found)')
+                       help='Path to reference audio file for speaker voice (default: first WAV file found)')
+    parser.add_argument('--emotion', type=str, default=None,
+                       help='Path to reference audio file for emotion/prosody (optional, blends with --reference)')
+    parser.add_argument('--emotion-blend', type=float, default=0.7,
+                       help='Emotion blend ratio: 0=only speaker prosody, 1=only emotion prosody (default: 0.7)')
     parser.add_argument('--output', type=str, default='output.wav',
                        help='Output audio file path (default: output.wav)')
     parser.add_argument('--alpha', type=float, default=0.3,
@@ -300,28 +304,57 @@ def main():
         print("Please download reference_audio.zip and extract it to Demo/reference_audio/")
         return
     
-    # Find a reference audio file
+    # Find speaker reference audio file
     if args.reference:
-        ref_path = Path(args.reference)
-        if not ref_path.exists():
-            print(f"Error: Reference audio file not found: {ref_path}")
+        speaker_path = Path(args.reference)
+        if not speaker_path.exists():
+            print(f"Error: Reference audio file not found: {speaker_path}")
             sys.exit(1)
     else:
         ref_files = list(REFERENCE_AUDIO_DIR.glob("*.wav"))
         if not ref_files:
             print(f"\nNo WAV files found in {REFERENCE_AUDIO_DIR}")
             return
-        ref_path = ref_files[0]
+        speaker_path = ref_files[0]
     
-    print(f"\nUsing reference audio: {ref_path.name}")
+    print(f"\nUsing speaker reference: {speaker_path.name}")
     
-    # Compute style
-    print("Computing style from reference audio...")
-    ref_s = compute_style(str(ref_path))
+    # Compute style from speaker
+    print("Computing style from speaker reference audio...")
+    speaker_style = compute_style(str(speaker_path))
     
-    if ref_s is None:
-        print("Error: Could not compute style from reference audio")
+    if speaker_style is None:
+        print("Error: Could not compute style from speaker reference audio")
         return
+    
+    # Handle emotion reference if provided
+    emotion_style = None
+    if args.emotion:
+        emotion_path = Path(args.emotion)
+        if not emotion_path.exists():
+            print(f"Error: Emotion reference audio file not found: {emotion_path}")
+            sys.exit(1)
+        
+        print(f"Using emotion reference: {emotion_path.name}")
+        print("Computing style from emotion reference audio...")
+        emotion_style = compute_style(str(emotion_path))
+        
+        if emotion_style is None:
+            print("Error: Could not compute style from emotion reference audio")
+            return
+        
+        # Blend speaker timbre with emotion prosody
+        # ref_s structure: [timbre (128 dims), prosody (128 dims)]
+        emotion_blend = args.emotion_blend
+        print(f"Blending styles: {emotion_blend*100:.0f}% emotion prosody, {(1-emotion_blend)*100:.0f}% speaker prosody")
+        
+        # Use speaker's timbre (voice identity) and blend prosody (emotion)
+        blended_timbre = speaker_style[:, :128]  # Keep speaker's voice
+        blended_prosody = emotion_blend * emotion_style[:, 128:] + (1 - emotion_blend) * speaker_style[:, 128:]
+        ref_s = torch.cat([blended_timbre, blended_prosody], dim=1)
+    else:
+        # Use only speaker reference
+        ref_s = speaker_style
     
     # Synthesize text
     text = args.text
