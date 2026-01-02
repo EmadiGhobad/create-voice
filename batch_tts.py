@@ -331,12 +331,15 @@ def process_batch(input_dir, text, output_dir, alpha=0.1, beta=0.3, steps=25, em
         speaker_style = compute_style(str(speaker_file))
         
         # Generate no-emotion version
-        print(f"\nGenerating: {speaker_name}-no-emotion.wav")
         start_time = time.time()
         try:
             wav = inference(text, speaker_style, alpha=alpha, beta=beta, 
                           diffusion_steps=steps, embedding_scale=embedding_scale)
-            output_file = output_path / f"{speaker_name}-no-emotion.wav"
+
+            output_file = output_path / speaker_name / f"{speaker_name}-no-emotion-{alpha:.2f}-{beta:.2f}.wav"
+            Path(output_path / speaker_name).mkdir(parents=True, exist_ok=True)
+            print(f"\nGenerating: {output_file}")
+
             sf.write(str(output_file), wav, 24000)
             elapsed = time.time() - start_time
             total_time += elapsed
@@ -349,7 +352,7 @@ def process_batch(input_dir, text, output_dir, alpha=0.1, beta=0.3, steps=25, em
         # Generate emotion versions
         for emotion_file in emotion_files:
             emotion_name = get_filename_without_extension(emotion_file)
-            output_filename = f"{speaker_name}-{emotion_name}.wav"
+            output_filename = f"{speaker_name}-{emotion_name}-{alpha}-{beta}.wav"
             
             print(f"\nGenerating: {output_filename}")
             start_time = time.time()
