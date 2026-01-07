@@ -57,3 +57,27 @@ https://www.youtube.com/shorts/xiSDR_6vfZA
 
 3. getting sample from another one: ./get-wav-sample.sh input/real-videos-ref/ghobad-persian.m4a 00:00:00 00:00:04
 
+# How to run scripts
+```bash
+python inference_local.py \
+--text-file my_long_text.txt \
+--reference speaker.wav \
+--emotion emotion.wav \
+--output output.wav \
+--alpha 0.3 \
+--beta 0.7 \
+--steps 5 \
+--max-tokens 450 \
+--crossfade-ms 50
+# without emotion reference
+python inference_local.py \
+--text-file my_long_text.txt \
+--reference speaker.wav \
+--output output.wav \
+--alpha 0.3 \
+--beta 0.7 \
+--steps 5 \
+--max-tokens 450 \
+--crossfade-ms 50
+
+```
