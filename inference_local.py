@@ -6,6 +6,7 @@ Based on the Inference_LibriTTS.ipynb notebook
 import os
 import sys
 import time
+from datetime import datetime
 import torch
 
 # Ensure espeak is in PATH and library path (for phonemizer)
@@ -414,18 +415,16 @@ def count_tokens(text, normalize=True):
     return len(tokens)
 
 
-def split_text_into_chunks(text, max_tokens=450, normalize=True):
+def split_text_into_sentences(text):
     """
-    Split text into chunks at sentence boundaries, respecting max_tokens limit.
-    Adds sentences one by one to the current chunk until it would overflow.
+    Split text into chunks by sentences only (separated by dots).
+    Each sentence becomes its own chunk, regardless of token count.
     
     Args:
         text: Input text to split
-        max_tokens: Maximum tokens per chunk (default: 450, safety margin for 512 limit)
-        normalize: Whether to normalize text for pronunciation (default: True)
     
     Returns:
-        List of text chunks
+        List of text chunks (one per sentence)
     """
     # Split text into sentences, preserving sentence endings
     # Pattern matches sentence endings (. ! ?) followed by whitespace or end of string
@@ -449,6 +448,28 @@ def split_text_into_chunks(text, max_tokens=450, normalize=True):
     
     # Filter out empty sentences
     sentences = [s.strip() for s in sentences if s.strip()]
+    
+    if not sentences:
+        return [text.strip()] if text.strip() else []
+    
+    return sentences
+
+
+def split_text_into_chunks(text, max_tokens=450, normalize=True):
+    """
+    Split text into chunks at sentence boundaries, respecting max_tokens limit.
+    Adds sentences one by one to the current chunk until it would overflow.
+    
+    Args:
+        text: Input text to split
+        max_tokens: Maximum tokens per chunk (default: 450, safety margin for 512 limit)
+        normalize: Whether to normalize text for pronunciation (default: True)
+    
+    Returns:
+        List of text chunks
+    """
+    # Use split_text_into_sentences to get sentence list
+    sentences = split_text_into_sentences(text)
     
     if not sentences:
         return [text.strip()] if text.strip() else []
@@ -747,7 +768,7 @@ def save_chunks_metadata(chunk_metadata, total_chunks, max_tokens, crossfade_ms,
 
 
 def inference_chunked(text, ref_s, max_tokens, alpha=0.3, beta=0.7, diffusion_steps=5,
-                      embedding_scale=1, crossfade_ms=50, normalize=True, dict_path=None, debug_chunks=False):
+                      embedding_scale=1, crossfade_ms=50, normalize=True, dict_path=None, debug_chunks=False, chunk_by_sentences=False):
     """
     Perform text-to-speech inference for long texts by splitting into chunks.
     
@@ -758,9 +779,10 @@ def inference_chunked(text, ref_s, max_tokens, alpha=0.3, beta=0.7, diffusion_st
         beta: Prosody control parameter
         diffusion_steps: Number of diffusion steps
         embedding_scale: Embedding scale for style
-        max_tokens: Maximum tokens per chunk (default: 450)
+        max_tokens: Maximum tokens per chunk (default: 450, only used when chunk_by_sentences=False)
         crossfade_ms: Crossfade duration in milliseconds (default: 50ms)
         normalize: Whether to normalize text for pronunciation (default: True)
+        chunk_by_sentences: If True, split by sentences only (ignores max_tokens). If False, split by token capacity.
     
     Returns:
         Concatenated audio array
@@ -774,8 +796,12 @@ def inference_chunked(text, ref_s, max_tokens, alpha=0.3, beta=0.7, diffusion_st
     
     # Split into chunks
     # print(f"Text is too long ({token_count} tokens), splitting into chunks...")
-    chunks = split_text_into_chunks(text, max_tokens, normalize=normalize)
-    print(f"Split into {len(chunks)} chunks")
+    if chunk_by_sentences:
+        chunks = split_text_into_sentences(text)
+        print(f"Split into {len(chunks)} chunks (sentence-by-sentence mode)")
+    else:
+        chunks = split_text_into_chunks(text, max_tokens, normalize=normalize)
+        print(f"Split into {len(chunks)} chunks (token-capacity mode, max_tokens={max_tokens})")
     
     # Process each chunk
     audio_chunks = []
@@ -784,7 +810,9 @@ def inference_chunked(text, ref_s, max_tokens, alpha=0.3, beta=0.7, diffusion_st
     # Create debug directory if needed
     debug_dir = None
     if debug_chunks:
-        debug_dir = Path(__file__).parent / "debug_output"
+        # Create timestamped debug folder to avoid overriding previous runs
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        debug_dir = Path(__file__).parent / f"debug_output_{timestamp}"
         debug_dir.mkdir(exist_ok=True)
         print(f"Debug mode enabled: Saving chunks to {debug_dir}")
     
@@ -834,6 +862,8 @@ def parse_arguments():
                         help='Embedding scale for style (default: 1.0)')
     parser.add_argument('--max-tokens', type=int, default=512,
                         help='Maximum tokens per chunk for long texts (default: 450)')
+    parser.add_argument('--chunk-by-sentences', action='store_true',
+                        help='Split text by sentences only (separated by dots), ignoring token capacity. If not set, uses token-capacity based chunking.')
     parser.add_argument('--crossfade-ms', type=int, default=50,
                         help='Crossfade duration in milliseconds for chunk concatenation (default: 50)')
     parser.add_argument('--disable-normalization', action='store_true',
@@ -841,7 +871,7 @@ def parse_arguments():
     parser.add_argument('--pronunciation-dict', type=str, default=None,
                         help='Path to pronunciation dictionary JSON file (default: pronunciation_dict.json in script directory)')
     parser.add_argument('--debug-chunks', action='store_true',
-                        help='Save individual chunk audio files and metadata for debugging (saves to debug_output/ directory)')
+                        help='Save individual chunk audio files and metadata for debugging (saves to debug_output_TIMESTAMP/ directory)')
     
     return parser.parse_args()
 
@@ -929,9 +959,9 @@ def get_reference_audio_path(reference_path=None):
         print("Please download reference_audio.zip and extract it to Demo/reference_audio/")
         return None
     
-        ref_files = list(REFERENCE_AUDIO_DIR.glob("*.wav"))
-        if not ref_files:
-            print(f"\nNo WAV files found in {REFERENCE_AUDIO_DIR}")
+    ref_files = list(REFERENCE_AUDIO_DIR.glob("*.wav"))
+    if not ref_files:
+        print(f"\nNo WAV files found in {REFERENCE_AUDIO_DIR}")
         return None
     
     return ref_files[0]
@@ -991,7 +1021,7 @@ def compute_style_embedding(speaker_path, emotion_path=None, emotion_blend=0.7):
     return ref_s
 
 
-def synthesize_text(text, ref_s, alpha, beta, steps, embedding_scale, max_tokens, crossfade_ms, normalize=True, dict_path=None, debug_chunks=False):
+def synthesize_text(text, ref_s, alpha, beta, steps, embedding_scale, max_tokens, crossfade_ms, normalize=True, dict_path=None, debug_chunks=False, chunk_by_sentences=False):
     """
     Synthesize text to speech, handling chunking for long texts.
     
@@ -1005,6 +1035,7 @@ def synthesize_text(text, ref_s, alpha, beta, steps, embedding_scale, max_tokens
         max_tokens: Maximum tokens per chunk
         crossfade_ms: Crossfade duration in milliseconds
         normalize: Whether to normalize text for pronunciation (default: True)
+        chunk_by_sentences: If True, split by sentences only. If False, split by token capacity.
     
     Returns:
         Audio array and processing time
@@ -1013,12 +1044,15 @@ def synthesize_text(text, ref_s, alpha, beta, steps, embedding_scale, max_tokens
     print(f"Using settings: alpha={alpha}, beta={beta}, diffusion_steps={steps}")
     if not normalize:
         print("Note: Text normalization is disabled")
+    if chunk_by_sentences:
+        print("Note: Chunking mode: sentence-by-sentence (ignoring token capacity)")
 
     start_time = time.time()
     wav = inference_chunked(
         text, ref_s, max_tokens, alpha=alpha, beta=beta,
         diffusion_steps=steps, embedding_scale=embedding_scale,
-        crossfade_ms=crossfade_ms, normalize=normalize, dict_path=dict_path, debug_chunks=debug_chunks
+        crossfade_ms=crossfade_ms, normalize=normalize, dict_path=dict_path, debug_chunks=debug_chunks,
+        chunk_by_sentences=chunk_by_sentences
     )
     elapsed = time.time() - start_time
 
@@ -1078,7 +1112,8 @@ def main():
     wav, elapsed = synthesize_text(
         text, ref_s, args.alpha, args.beta, args.steps,
         args.embedding_scale, args.max_tokens, args.crossfade_ms, 
-        normalize=normalize, dict_path=dict_path, debug_chunks=args.debug_chunks
+        normalize=normalize, dict_path=dict_path, debug_chunks=args.debug_chunks,
+        chunk_by_sentences=args.chunk_by_sentences
     )
     
     # Save output

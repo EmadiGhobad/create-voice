@@ -180,41 +180,6 @@ python inference_local.py \
 
 **More examples:**
 ```bash
-# Nima with anger
-DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
-python inference_local.py \
-  --text "I can't believe you did that!" \
-  --reference StyleTTS2/Demo/reference_audio/Nima.wav \
-  --emotion StyleTTS2/Demo/reference_audio/anger.wav \
-  --output nima_angry.wav
-
-# Vinay with sleepy tone
-DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
-python inference_local.py \
-  --text "I'm so tired, I need to rest now." \
-  --reference StyleTTS2/Demo/reference_audio/Vinay.wav \
-  --emotion StyleTTS2/Demo/reference_audio/sleepy.wav \
-  --output vinay_sleepy.wav
-
-# Yinghao with disgusted emotion
-DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
-python inference_local.py \
-  --text "That's absolutely revolting!" \
-  --reference StyleTTS2/Demo/reference_audio/Yinghao.wav \
-  --emotion StyleTTS2/Demo/reference_audio/disgusted.wav \
-  --output yinghao_disgusted.wav
-
-# High quality emotional speech
-DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
-python inference_local.py \
-  --text "This is amazing!" \
-  --reference StyleTTS2/Demo/reference_audio/Gavin.wav \
-  --emotion StyleTTS2/Demo/reference_audio/amused.wav \
-  --emotion-blend 0.8 \
-  --steps 20 \
-  --embedding-scale 1.5 \
-  --output high_quality_emotional.wav
-
 python inference_local.py \
   --text-file my_long_text.txt \
   --output output.wav \
@@ -225,7 +190,12 @@ python inference_local.py \
   --steps 5 \
   --max-tokens 450 \
   --crossfade-ms 50 \
-  --debug-chunks
+  --debug-chunks --chunk-by-sentences
+  
+# High quality emotional speech params if you like to use
+  --emotion StyleTTS2/Demo/reference_audio/amused.wav \
+  --emotion-blend 0.8 \
+  --embedding-scale 1.5 
 ```
 
 #### Create new Speakers with different alpha and beta

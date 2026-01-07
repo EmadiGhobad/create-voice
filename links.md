@@ -1,6 +1,7 @@
 Sarah Koenig
 https://www.youtube.com/watch?v=wq7bsJD6BCM
 Julia Whelan, conversational part not the story telling part
+https://www.youtube.com/watch?v=FqkZcKL2FiQ 
 https://www.youtube.com/watch?v=9kGK_fhbFGw&list=PLpYfNT1HMNMvY28h0OCz9mVIt6CRnQC_G&index=1
 
 
