@@ -55,7 +55,7 @@ https://www.youtube.com/shorts/xiSDR_6vfZA
 
 2. yt-dlp -x --audio-format mp3 "https://www.youtube.com/shorts/TLYapkv5sc8"  
 
-3. getting sample from another one: ./get-wav-sample.sh input/real-videos-ref/ghobad-persian.m4a 00:00:00 00:00:04
+3. getting sample from another one: ./get-wav-sample.sh input/real-videos-ref/Julia\ Whelan.mp4 00:01:05 00:01:15
 
 # How to run scripts
 ```bash

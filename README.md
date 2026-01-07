@@ -214,6 +214,18 @@ python inference_local.py \
   --steps 20 \
   --embedding-scale 1.5 \
   --output high_quality_emotional.wav
+
+python inference_local.py \
+  --text-file my_long_text.txt \
+  --output output.wav \
+  --reference speaker.wav \
+  --emotion emotion.wav \
+  --alpha 0.3 \
+  --beta 0.7 \
+  --steps 5 \
+  --max-tokens 450 \
+  --crossfade-ms 50 \
+  --debug-chunks
 ```
 
 #### Create new Speakers with different alpha and beta
@@ -228,7 +240,7 @@ file there as a reference, then it will create 16 different files for the refere
  python all-alpha-beta-batch_tts.py \
   --input-dir ./input \
   --text-file ./input/text1.txt \
-  --output-dir ./input/generated
+  --output-dir ./input/generated  
 ```
 
 **Key benefits:**

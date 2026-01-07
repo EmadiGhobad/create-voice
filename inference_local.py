@@ -693,8 +693,61 @@ def inference(text, ref_s, alpha=0.3, beta=0.7, diffusion_steps=5, embedding_sca
     return out.squeeze().cpu().numpy()[..., :-50]  # Remove weird pulse at the end
 
 
+def save_chunk_debug_info(chunk_index, chunk_text, chunk_audio, token_count, debug_dir):
+    """
+    Save individual chunk audio file and return metadata for JSON.
+    
+    Args:
+        chunk_index: Index of the chunk (0-based)
+        chunk_text: Text content of the chunk
+        chunk_audio: Audio array for the chunk
+        token_count: Number of tokens in the chunk
+        debug_dir: Path to debug output directory
+    
+    Returns:
+        Dictionary with chunk metadata
+    """
+    # Calculate audio duration
+    chunk_duration = len(chunk_audio) / 24000.0
+    
+    # Save individual chunk audio
+    chunk_audio_path = debug_dir / f"chunk_{chunk_index}.wav"
+    sf.write(str(chunk_audio_path), chunk_audio, 24000)
+    
+    # Return metadata
+    return {
+        "chunk_index": chunk_index,
+        "text": chunk_text,
+        "token_count": token_count,
+        "audio_duration_seconds": round(chunk_duration, 3),
+        "audio_file": f"chunk_{chunk_index}.wav"
+    }
+
+
+def save_chunks_metadata(chunk_metadata, total_chunks, max_tokens, crossfade_ms, debug_dir):
+    """
+    Save chunks metadata to JSON file.
+    
+    Args:
+        chunk_metadata: List of chunk metadata dictionaries
+        total_chunks: Total number of chunks
+        max_tokens: Maximum tokens per chunk setting
+        crossfade_ms: Crossfade duration in milliseconds
+        debug_dir: Path to debug output directory
+    """
+    metadata_path = debug_dir / "chunks_info.json"
+    with open(metadata_path, 'w', encoding='utf-8') as f:
+        json.dump({
+            "total_chunks": total_chunks,
+            "max_tokens_per_chunk": max_tokens,
+            "crossfade_ms": crossfade_ms,
+            "chunks": chunk_metadata
+        }, f, indent=2, ensure_ascii=False)
+    print(f"Saved chunk metadata to {metadata_path}")
+
+
 def inference_chunked(text, ref_s, max_tokens, alpha=0.3, beta=0.7, diffusion_steps=5,
-                      embedding_scale=1, crossfade_ms=50, normalize=True, dict_path=None):
+                      embedding_scale=1, crossfade_ms=50, normalize=True, dict_path=None, debug_chunks=False):
     """
     Perform text-to-speech inference for long texts by splitting into chunks.
     
@@ -726,11 +779,29 @@ def inference_chunked(text, ref_s, max_tokens, alpha=0.3, beta=0.7, diffusion_st
     
     # Process each chunk
     audio_chunks = []
-    for i, chunk in enumerate(chunks, 1):
+    chunk_metadata = []
+    
+    # Create debug directory if needed
+    debug_dir = None
+    if debug_chunks:
+        debug_dir = Path(__file__).parent / "debug_output"
+        debug_dir.mkdir(exist_ok=True)
+        print(f"Debug mode enabled: Saving chunks to {debug_dir}")
+    
+    for i, chunk in enumerate(chunks):
         chunk_token_count = count_tokens(chunk, normalize=normalize)
-        print(f"Processing chunk {i}/{len(chunks)} ({chunk_token_count} tokens)\n {chunk}...")
+        print(f"Processing chunk {i+1}/{len(chunks)} ({chunk_token_count} tokens)...")
         chunk_audio = inference(chunk, ref_s, alpha, beta, diffusion_steps, embedding_scale, normalize=normalize, dict_path=dict_path)
         audio_chunks.append(chunk_audio)
+        
+        # Save debug information if enabled
+        if debug_chunks and debug_dir:
+            metadata = save_chunk_debug_info(i, chunk, chunk_audio, chunk_token_count, debug_dir)
+            chunk_metadata.append(metadata)
+    
+    # Save metadata JSON if debug mode
+    if debug_chunks and debug_dir and chunk_metadata:
+        save_chunks_metadata(chunk_metadata, len(chunks), max_tokens, crossfade_ms, debug_dir)
     
     # Concatenate with crossfading
     print("Concatenating audio chunks...")
@@ -769,6 +840,8 @@ def parse_arguments():
                         help='Disable text normalization for pronunciation improvement (default: normalization enabled)')
     parser.add_argument('--pronunciation-dict', type=str, default=None,
                         help='Path to pronunciation dictionary JSON file (default: pronunciation_dict.json in script directory)')
+    parser.add_argument('--debug-chunks', action='store_true',
+                        help='Save individual chunk audio files and metadata for debugging (saves to debug_output/ directory)')
     
     return parser.parse_args()
 
@@ -918,7 +991,7 @@ def compute_style_embedding(speaker_path, emotion_path=None, emotion_blend=0.7):
     return ref_s
 
 
-def synthesize_text(text, ref_s, alpha, beta, steps, embedding_scale, max_tokens, crossfade_ms, normalize=True, dict_path=None):
+def synthesize_text(text, ref_s, alpha, beta, steps, embedding_scale, max_tokens, crossfade_ms, normalize=True, dict_path=None, debug_chunks=False):
     """
     Synthesize text to speech, handling chunking for long texts.
     
@@ -945,7 +1018,7 @@ def synthesize_text(text, ref_s, alpha, beta, steps, embedding_scale, max_tokens
     wav = inference_chunked(
         text, ref_s, max_tokens, alpha=alpha, beta=beta,
         diffusion_steps=steps, embedding_scale=embedding_scale,
-        crossfade_ms=crossfade_ms, normalize=normalize, dict_path=dict_path
+        crossfade_ms=crossfade_ms, normalize=normalize, dict_path=dict_path, debug_chunks=debug_chunks
     )
     elapsed = time.time() - start_time
 
@@ -1005,7 +1078,7 @@ def main():
     wav, elapsed = synthesize_text(
         text, ref_s, args.alpha, args.beta, args.steps,
         args.embedding_scale, args.max_tokens, args.crossfade_ms, 
-        normalize=normalize, dict_path=dict_path
+        normalize=normalize, dict_path=dict_path, debug_chunks=args.debug_chunks
     )
     
     # Save output
