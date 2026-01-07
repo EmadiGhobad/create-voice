@@ -216,6 +216,26 @@ python inference_local.py \
   --output high_quality_emotional.wav
 ```
 
+#### Create new Speakers with different alpha and beta
+
+Create completely new voices that never existed by twining alpha and beta based on the reference speakers! In `input`
+dir it expects nested `speakers` folder, inside that for all the wav files it will do the process. Better to have one
+file there as a reference, then it will create 16 different files for the reference with different alpha and beta.
+
+**Basic usage:**
+```bash
+# In the ip
+ python all-alpha-beta-batch_tts.py \
+  --input-dir ./input \
+  --text-file ./input/text1.txt \
+  --output-dir ./input/generated
+```
+
+**Key benefits:**
+- ✅ Creates unique voices (not clones)
+- ✅ Teh identifier of each created speaker is not the created voice, instead it is the reference voice with the used parameters
+  suck as alpha and beta values. The created voice is just for the checking and listening to the final voice.
+
 #### Adjust Voice Characteristics
 
 Control how similar the synthesized voice is to the reference speaker:
@@ -246,16 +266,48 @@ python inference_local.py \
 python inference_local.py --help
 ```
 
-Available options:
-- `--text TEXT`: Text to synthesize (default: test sentence)
-- `--reference REFERENCE`: Path to reference audio file for speaker voice (default: first WAV found)
-- `--emotion EMOTION`: Path to reference audio file for emotion/prosody (optional, blends with --reference)
-- `--emotion-blend BLEND`: Emotion blend ratio: 0=only speaker prosody, 1=only emotion prosody (default: 0.7 = 70% emotion, 30% speaker)
-- `--output OUTPUT`: Output audio file path (default: `output.wav`)
-- `--alpha ALPHA`: Timbre control: 0=reference, 1=sampled (default: 0.3)
-- `--beta BETA`: Prosody control: 0=reference, 1=sampled (default: 0.7)
-- `--steps STEPS`: Number of diffusion steps (default: 5, more = better quality but slower)
-- `--embedding-scale SCALE`: Embedding scale for style (default: 1.0)
+Available options (with default values):
+
+**Required/Optional Parameters:**
+- `--text TEXT`: Text to synthesize  
+  **Default:** `"Hello, this is a test of StyleTTS2 text to speech synthesis."`
+
+- `--reference REFERENCE`: Path to reference audio file for speaker voice  
+  **Default:** `None` (uses first WAV file found in `StyleTTS2/Demo/reference_audio/`)
+
+- `--emotion EMOTION`: Path to reference audio file for emotion/prosody (optional, blends with --reference)  
+  **Default:** `None` (no emotion blending)
+
+- `--output OUTPUT`: Output audio file path  
+  **Default:** `output.wav`
+
+**Voice Control Parameters:**
+- `--alpha ALPHA`: Timbre control: 0=reference, 1=sampled  
+  **Default:** `0.3`
+
+- `--beta BETA`: Prosody control: 0=reference, 1=sampled  
+  **Default:** `0.7`
+
+- `--emotion-blend BLEND`: Emotion blend ratio: 0=only speaker prosody, 1=only emotion prosody  
+  **Default:** `0.7` (70% emotion, 30% speaker)
+
+**Quality Parameters:**
+- `--steps STEPS`: Number of diffusion steps (more = better quality but slower)  
+  **Default:** `5`
+
+- `--embedding-scale SCALE`: Embedding scale for style  
+  **Default:** `1.0`
+
+**Synthetic Speaker Parameters:**
+- `--synthetic-speakers SPEAKERS`: List of reference audio paths to create a synthetic speaker (averages embeddings from multiple speakers)  
+  **Default:** `None` (uses single speaker mode)
+
+- `--noise-scale SCALE`: Noise scale for synthetic speaker  
+  **Default:** `0.05`  
+  **See:** [Synthetic Speaker Guide](SYNTHETIC_SPEAKER.md) for detailed explanation
+
+- `--predictor-from PATH`: Path to audio file to use for predictor embedding in synthetic speaker  
+  **Default:** `None` (averages predictor embeddings from all speakers)
 
 ### Example Commands
 
