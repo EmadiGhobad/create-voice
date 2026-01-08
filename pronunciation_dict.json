@@ -1,0 +1,26 @@
+{
+  "comment": "Pronunciation dictionary for StyleTTS2. Map words to their phonetic spellings or alternative text for better pronunciation.",
+  "dictionary": {
+    "data": "day-ta",
+    "route": "root",
+    "read": "reed",
+    "live": "liv",
+    "wind": "wind",
+    "tear": "teer",
+    "bow": "boh",
+    "lead": "leed",
+    "minute": "min-it",
+    "record": "rek-ord",
+    "object": "ob-jekt",
+    "project": "proj-ekt",
+    "present": "prez-ent",
+    "content": "kon-tent",
+    "desert": "dez-ert",
+    "produce": "pro-doos",
+    "refuse": "re-fyooz",
+    "subject": "sub-jekt",
+    "contract": "kon-trakt",
+    "permit": "per-mit",
+  }
+}
+

@@ -170,29 +170,64 @@ def load_models(config_path, model_path, device):
         os.chdir(original_cwd)
 
 
-def load_pronunciation_dictionary(dict_path=None):
+def load_pronunciation_dictionary(dict_path=None, config_path=None):
     """
     Load pronunciation dictionary from JSON file.
     
     Args:
         dict_path: Path to pronunciation dictionary JSON file. 
-                   If None, uses default location.
+                   If None or empty string, uses default location.
+        config_path: Optional path to config file (for resolving relative paths)
     
     Returns:
         Dictionary mapping words to their phonetic spellings
+    
+    Raises:
+        SystemExit: If user explicitly provided a path but file doesn't exist
     """
     global pronunciation_dict
     
-    if dict_path is None:
+    # Track if user explicitly provided a path (vs using default)
+    user_provided_path = dict_path is not None and isinstance(dict_path, str) and dict_path.strip() != ""
+    
+    # Treat empty string as None (use default)
+    if not user_provided_path:
         dict_path = Path(__file__).parent / "pronunciation_dict.json"
     else:
-        dict_path = Path(dict_path)
+        dict_path_obj = Path(dict_path)
+        
+        # Resolve relative paths - try working directory first, then config directory
+        if not dict_path_obj.is_absolute():
+            dict_path_cwd = Path.cwd() / dict_path_obj
+            if config_path:
+                dict_path_config = config_path.parent / dict_path_obj
+            else:
+                dict_path_config = None
+            
+            if dict_path_cwd.exists():
+                dict_path = dict_path_cwd
+            elif dict_path_config and dict_path_config.exists():
+                dict_path = dict_path_config
+            else:
+                # Use working directory path for error message
+                dict_path = dict_path_cwd
+        else:
+            dict_path = dict_path_obj
     
     if not dict_path.exists():
-        print(f"Warning: Pronunciation dictionary not found at {dict_path}")
-        print("Using default pronunciation (no custom dictionary)")
-        pronunciation_dict = {}
-        return {}
+        if user_provided_path:
+            # User explicitly provided a path that doesn't exist - this is an error
+            print(f"Error: Pronunciation dictionary file not found: {dict_path}")
+            if config_path:
+                print(f"  Tried: {Path.cwd() / Path(dict_path)}")
+                print(f"  Tried: {config_path.parent / Path(dict_path)}")
+            sys.exit(1)
+        else:
+            # Default path doesn't exist - this is fine, just use empty dict
+            print(f"Info: Default pronunciation dictionary not found at {dict_path}")
+            print("Using default pronunciation (no custom dictionary)")
+            pronunciation_dict = {}
+            return {}
     
     try:
         with open(dict_path, 'r', encoding='utf-8') as f:
@@ -213,14 +248,14 @@ def apply_pronunciation_dictionary(text, dict_path=None):
     
     Args:
         text: Input text
-        dict_path: Optional path to dictionary file (loads if not already loaded)
+        dict_path: Optional path to dictionary file (usually already loaded, this is for backward compatibility)
     
     Returns:
         Text with words replaced according to dictionary
     """
     global pronunciation_dict
     
-    # Load dictionary if not already loaded
+    # Load dictionary if not already loaded (shouldn't happen if loaded in main, but kept for safety)
     if pronunciation_dict is None:
         load_pronunciation_dictionary(dict_path)
     
@@ -231,11 +266,25 @@ def apply_pronunciation_dictionary(text, dict_path=None):
     # Sort by length (longest first) to handle compound words correctly
     sorted_words = sorted(pronunciation_dict.keys(), key=len, reverse=True)
     
+    original_text = text
+    replacements_made = []
+    
     for word in sorted_words:
         replacement = pronunciation_dict[word]
         # Use word boundaries to match whole words only (case-insensitive)
         pattern = r'\b' + re.escape(word) + r'\b'
-        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+        new_text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+        if new_text != text:
+            replacements_made.append(f"'{word}' -> '{replacement}'")
+            text = new_text
+    
+    # Debug output: show if any replacements were made
+    if replacements_made:
+        print(f"  ✓ Applied {len(replacements_made)} dictionary replacement(s):")
+        for replacement in replacements_made:
+            print(f"    {replacement}")
+    else:
+        print(f"  ℹ No dictionary replacements applied (text had no matching words)")
     
     return text
 
@@ -1015,10 +1064,15 @@ def validate_config(config, config_path):
         print(f"Error: 'debug-chunks' must be a boolean (true/false)")
         sys.exit(1)
     
-    # Validate pronunciation-dict (can be null or a string path)
-    if config['pronunciation-dict'] is not None and not isinstance(config['pronunciation-dict'], str):
-        print(f"Error: 'pronunciation-dict' must be null or a string path")
-        sys.exit(1)
+    # Validate pronunciation-dict (can be null or a non-empty string path)
+    pronunciation_dict_val = config['pronunciation-dict']
+    if pronunciation_dict_val is not None:
+        if not isinstance(pronunciation_dict_val, str):
+            print(f"Error: 'pronunciation-dict' must be null or a string path")
+            sys.exit(1)
+        if pronunciation_dict_val.strip() == "":
+            print(f"Error: 'pronunciation-dict' cannot be an empty string. Use null to use default dictionary.")
+            sys.exit(1)
     
     print(f"✓ Config file validated: {config_path}")
 
@@ -1489,9 +1543,9 @@ def main():
     print(f"\nText length: {len(text)} characters")
     print(f"Config hash: {config_hash}")
     
-    # Load pronunciation dictionary
+    # Load pronunciation dictionary (resolve path relative to config file if needed)
     dict_path = config['pronunciation-dict']
-    load_pronunciation_dictionary(dict_path)
+    load_pronunciation_dictionary(dict_path, config_path)
     
     # Validate paths
     validate_paths()
