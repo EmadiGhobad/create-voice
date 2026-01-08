@@ -1,5 +1,5 @@
 {
-  "batch-id": 11,
+  "batch-id": 1,
   "texts": {
 	"content": "She reveals that her own history cultivated this pervasive need for perfection, watching it consumes chunks of her life under the false promise that the resulting success would justify the losses.",
 	"chunk-policy": "Sentence"
@@ -39,7 +39,6 @@
   "max-tokens": 450,
   "crossfade-ms": 50,
   "normalize": true,
-  "pronunciation-dict": null,
-  "debug-chunks": false,
-  "output-path": "input/generated/"
+  "pronunciation-dict": "pronunciation_dict.json",
+  "debug-chunks": false
 }
