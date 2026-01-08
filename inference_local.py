@@ -7,6 +7,7 @@ import os
 import sys
 import time
 import copy
+import hashlib
 from datetime import datetime
 import torch
 
@@ -879,7 +880,6 @@ def validate_config(config, config_path):
     """
     required_fields = [
         'batch-id',
-        'voice-id',
         'texts',
         'steps',
         'alpha',
@@ -1033,10 +1033,36 @@ def parse_arguments():
     return parser.parse_args()
 
 
+def generate_config_hash(config):
+    """
+    Generate a hash from the config content for use in filenames.
+    Excludes output-path since it's just a save location and shouldn't affect the hash.
+    
+    Args:
+        config: Configuration dictionary
+    
+    Returns:
+        String hash (first 12 characters of SHA256)
+    """
+    # Create a copy and remove output-path to ensure same voice config produces same hash
+    # (output-path is just where to save, not part of voice generation)
+    config_copy = copy.deepcopy(config)
+    if 'output-path' in config_copy:
+        del config_copy['output-path']
+    
+    # Convert to JSON string with sorted keys for consistent hashing
+    config_str = json.dumps(config_copy, sort_keys=True, ensure_ascii=False)
+    hash_obj = hashlib.sha256(config_str.encode('utf-8'))
+    hash_hex = hash_obj.hexdigest()
+    # Use first 12 characters for readability
+    return hash_hex[:12]
+
+
 def generate_output_path(config):
     """
     Generate output file path from config.
     Creates a subfolder batch-{batch-id} in the output directory.
+    Uses config hash instead of voice-id for filename.
     
     Args:
         config: Configuration dictionary
@@ -1046,14 +1072,14 @@ def generate_output_path(config):
     """
     output_dir = Path(config['output-path'])
     batch_id = config['batch-id']
-    voice_id = config['voice-id']
+    config_hash = generate_config_hash(config)
     
     # Create batch subfolder: {output-path}/batch-{batch-id}
     batch_dir = output_dir / f"batch-{batch_id}"
     batch_dir.mkdir(parents=True, exist_ok=True)
     
-    # Generate filename: batch-{batch-id}_voice-{voice-id}.wav
-    filename = f"batch-{batch_id}_voice-{voice_id}.wav"
+    # Generate filename: batch-{batch-id}_{hash}.wav
+    filename = f"batch-{batch_id}_{config_hash}.wav"
     output_path = batch_dir / filename
     
     return output_path

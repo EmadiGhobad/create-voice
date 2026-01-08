@@ -1,6 +1,5 @@
 {
   "batch-id": 11,
-  "voice-id": 9,
   "texts": {
 	"content": "She reveals that her own history cultivated this pervasive need for perfection, watching it consumes chunks of her life under the false promise that the resulting success would justify the losses.",
 	"chunk-policy": "Sentence"
