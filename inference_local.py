@@ -920,57 +920,80 @@ def validate_config(config, config_path):
         sys.exit(1)
     
     # Validate references structure
-    if 'files' not in config['references']:
-        print(f"Error: Missing 'files' in 'references' section")
+    if 'speakers' not in config['references']:
+        print(f"Error: Missing 'speakers' in 'references' section")
         sys.exit(1)
     
-    if not isinstance(config['references']['files'], list) or len(config['references']['files']) == 0:
-        print(f"Error: 'references.files' must be a non-empty list")
+    if not isinstance(config['references']['speakers'], list) or len(config['references']['speakers']) == 0:
+        print(f"Error: 'references.speakers' must be a non-empty list")
         sys.exit(1)
     
-    # Validate each reference file
-    for i, ref_file in enumerate(config['references']['files']):
-        if 'path' not in ref_file:
-            print(f"Error: Missing 'path' in references.files[{i}]")
+    # Validate each speaker
+    for i, speaker in enumerate(config['references']['speakers']):
+        if 'name' not in speaker:
+            print(f"Error: Missing 'name' in references.speakers[{i}]")
             sys.exit(1)
         
-        if 'timbre-weight' not in ref_file:
-            print(f"Error: Missing 'timbre-weight' in references.files[{i}]")
+        if 'paths' not in speaker:
+            print(f"Error: Missing 'paths' in references.speakers[{i}]")
             sys.exit(1)
         
-        if 'prosody-weight' not in ref_file:
-            print(f"Error: Missing 'prosody-weight' in references.files[{i}]")
+        if not isinstance(speaker['paths'], list) or len(speaker['paths']) == 0:
+            print(f"Error: 'paths' must be a non-empty list in references.speakers[{i}] (speaker: {speaker.get('name', 'unknown')})")
+            sys.exit(1)
+        
+        if 'timbre-weight' not in speaker:
+            print(f"Error: Missing 'timbre-weight' in references.speakers[{i}] (speaker: {speaker.get('name', 'unknown')})")
+            sys.exit(1)
+        
+        if 'prosody-weight' not in speaker:
+            print(f"Error: Missing 'prosody-weight' in references.speakers[{i}] (speaker: {speaker.get('name', 'unknown')})")
+            sys.exit(1)
+        
+        if 'sample-prosody-index' not in speaker:
+            print(f"Error: Missing 'sample-prosody-index' in references.speakers[{i}] (speaker: {speaker.get('name', 'unknown')})")
             sys.exit(1)
         
         # Validate weights are numbers
         try:
-            float(ref_file['timbre-weight'])
-            float(ref_file['prosody-weight'])
+            float(speaker['timbre-weight'])
+            float(speaker['prosody-weight'])
         except (ValueError, TypeError):
-            print(f"Error: 'timbre-weight' and 'prosody-weight' must be numbers in references.files[{i}]")
+            print(f"Error: 'timbre-weight' and 'prosody-weight' must be numbers in references.speakers[{i}] (speaker: {speaker.get('name', 'unknown')})")
             sys.exit(1)
         
-        # Validate file exists
-        ref_path = Path(ref_file['path'])
-        if not ref_path.is_absolute():
-            # Try relative to current working directory first
-            ref_path_cwd = Path.cwd() / ref_path
-            # Also try relative to config file directory
-            ref_path_config = config_path.parent / ref_path
+        # Validate sample-prosody-index
+        sample_prosody_idx = speaker['sample-prosody-index']
+        if not isinstance(sample_prosody_idx, int):
+            print(f"Error: 'sample-prosody-index' must be an integer in references.speakers[{i}] (speaker: {speaker.get('name', 'unknown')})")
+            sys.exit(1)
+        
+        if sample_prosody_idx != -1 and (sample_prosody_idx < 0 or sample_prosody_idx >= len(speaker['paths'])):
+            print(f"Error: 'sample-prosody-index' must be -1 or a valid index (0-{len(speaker['paths'])-1}) in references.speakers[{i}] (speaker: {speaker.get('name', 'unknown')})")
+            sys.exit(1)
+        
+        # Validate all audio files exist
+        for j, path_str in enumerate(speaker['paths']):
+            ref_path = Path(path_str)
+            if not ref_path.is_absolute():
+                # Try relative to current working directory first
+                ref_path_cwd = Path.cwd() / ref_path
+                # Also try relative to config file directory
+                ref_path_config = config_path.parent / ref_path
+                
+                if ref_path_cwd.exists():
+                    ref_path = ref_path_cwd
+                elif ref_path_config.exists():
+                    ref_path = ref_path_config
+                else:
+                    # Use the working directory path for error message
+                    ref_path = ref_path_cwd
             
-            if ref_path_cwd.exists():
-                ref_path = ref_path_cwd
-            elif ref_path_config.exists():
-                ref_path = ref_path_config
-            else:
-                # Use the working directory path for error message
-                ref_path = ref_path_cwd
-        
-        if not ref_path.exists():
-            print(f"Error: Reference audio file not found: {ref_path}")
-            print(f"  Tried: {Path.cwd() / Path(ref_file['path'])}")
-            print(f"  Tried: {config_path.parent / Path(ref_file['path'])}")
-            sys.exit(1)
+            if not ref_path.exists():
+                print(f"Error: Reference audio file not found for speaker '{speaker.get('name', 'unknown')}' path[{j}]: {ref_path}")
+                print(f"  Tried: {Path.cwd() / Path(path_str)}")
+                print(f"  Tried: {config_path.parent / Path(path_str)}")
+                sys.exit(1)
     
     # Validate numeric parameters
     try:
@@ -1147,30 +1170,28 @@ def compute_style_embedding_single(reference_path):
     return style
 
 
-def blend_multiple_references(references_list, config_path=None):
+def average_speaker_embeddings(speaker_paths, sample_prosody_index, config_path=None):
     """
-    Blend multiple reference audio files based on their timbre and prosody weights.
+    Average style embeddings from multiple audio files for a single speaker.
     
     Args:
-        references_list: List of dictionaries with keys: 'path', 'timbre-weight', 'prosody-weight'
+        speaker_paths: List of paths to audio files for this speaker
+        sample_prosody_index: Index of sample to use for prosody (-1 for mean, or 0-based index)
         config_path: Optional path to config file (for resolving relative paths)
     
     Returns:
-        Blended style embedding tensor (256 dims: 128 timbre + 128 prosody)
+        Averaged style embedding tensor (256 dims: 128 timbre + 128 prosody)
     """
-    if not references_list:
-        print("Error: No reference files provided")
+    if not speaker_paths:
+        print("Error: No paths provided for speaker")
         sys.exit(1)
     
-    # Compute style embeddings for all references
+    # Compute style embeddings for all samples
     styles = []
-    timbre_weights = []
-    prosody_weights = []
+    print(f"  Processing {len(speaker_paths)} sample(s)...")
     
-    print(f"\nProcessing {len(references_list)} reference file(s)...")
-    
-    for i, ref_info in enumerate(references_list):
-        ref_path = Path(ref_info['path'])
+    for i, path_str in enumerate(speaker_paths):
+        ref_path = Path(path_str)
         
         # Resolve relative paths - try working directory first, then config directory
         if not ref_path.is_absolute():
@@ -1185,23 +1206,84 @@ def blend_multiple_references(references_list, config_path=None):
             elif ref_path_config and ref_path_config.exists():
                 ref_path = ref_path_config
             else:
-                # Use working directory path as default
                 ref_path = ref_path_cwd
         
-        # Compute style embedding
         style = compute_style_embedding_single(ref_path)
         styles.append(style)
+    
+    # Average timbre across all samples (always use mean)
+    # ref_s structure: [timbre (128 dims), prosody (128 dims)]
+    averaged_timbre = torch.zeros_like(styles[0][:, :128])
+    for style in styles:
+        averaged_timbre += style[:, :128]
+    averaged_timbre = averaged_timbre / len(styles)
+    
+    # Handle prosody based on sample-prosody-index
+    if sample_prosody_index == -1:
+        # Use mean prosody across all samples
+        averaged_prosody = torch.zeros_like(styles[0][:, 128:])
+        for style in styles:
+            averaged_prosody += style[:, 128:]
+        averaged_prosody = averaged_prosody / len(styles)
+        print(f"    Using mean prosody across all {len(styles)} samples")
+    else:
+        # Use prosody from specific sample
+        if sample_prosody_index >= len(styles):
+            print(f"Error: sample-prosody-index {sample_prosody_index} is out of range (0-{len(styles)-1})")
+            sys.exit(1)
+        averaged_prosody = styles[sample_prosody_index][:, 128:]
+        print(f"    Using prosody from sample {sample_prosody_index}")
+    
+    # Concatenate averaged timbre and prosody
+    averaged_style = torch.cat([averaged_timbre, averaged_prosody], dim=1)
+    
+    return averaged_style
+
+
+def blend_multiple_speakers(speakers_list, config_path=None):
+    """
+    Average embeddings within each speaker, then blend multiple speakers based on their weights.
+    
+    Args:
+        speakers_list: List of speaker dictionaries with keys: 'name', 'paths', 'timbre-weight', 
+                      'prosody-weight', 'sample-prosody-index'
+        config_path: Optional path to config file (for resolving relative paths)
+    
+    Returns:
+        Blended style embedding tensor (256 dims: 128 timbre + 128 prosody)
+    """
+    if not speakers_list:
+        print("Error: No speakers provided")
+        sys.exit(1)
+    
+    # Step 1: Average embeddings within each speaker
+    speaker_embeddings = []
+    timbre_weights = []
+    prosody_weights = []
+    
+    print(f"\nProcessing {len(speakers_list)} speaker(s)...")
+    
+    for i, speaker_info in enumerate(speakers_list):
+        speaker_name = speaker_info.get('name', f'Speaker {i+1}')
+        paths = speaker_info['paths']
+        sample_prosody_index = speaker_info['sample-prosody-index']
+        
+        print(f"\nSpeaker {i+1}: {speaker_name}")
+        
+        # Average embeddings for this speaker
+        averaged_style = average_speaker_embeddings(paths, sample_prosody_index, config_path)
+        speaker_embeddings.append(averaged_style)
         
         # Get weights
-        timbre_weight = float(ref_info['timbre-weight'])
-        prosody_weight = float(ref_info['prosody-weight'])
+        timbre_weight = float(speaker_info['timbre-weight'])
+        prosody_weight = float(speaker_info['prosody-weight'])
         
         timbre_weights.append(timbre_weight)
         prosody_weights.append(prosody_weight)
         
-        print(f"  Reference {i+1}: {ref_path.name} (timbre-weight: {timbre_weight}, prosody-weight: {prosody_weight})")
+        print(f"  Weights: timbre={timbre_weight}, prosody={prosody_weight}")
     
-    # Normalize weights (sum to 1.0) so higher weights have bigger impact
+    # Step 2: Normalize weights (sum to 1.0) so higher weights have bigger impact
     timbre_weight_sum = sum(timbre_weights)
     prosody_weight_sum = sum(prosody_weights)
     
@@ -1216,16 +1298,17 @@ def blend_multiple_references(references_list, config_path=None):
     normalized_timbre_weights = [w / timbre_weight_sum for w in timbre_weights]
     normalized_prosody_weights = [w / prosody_weight_sum for w in prosody_weights]
     
-    print(f"\nBlending references:")
-    print(f"  Timbre weights (normalized): {[f'{w:.3f}' for w in normalized_timbre_weights]}")
-    print(f"  Prosody weights (normalized): {[f'{w:.3f}' for w in normalized_prosody_weights]}")
+    print(f"\nBlending speakers:")
+    for i, speaker_info in enumerate(speakers_list):
+        speaker_name = speaker_info.get('name', f'Speaker {i+1}')
+        print(f"  {speaker_name}: timbre={normalized_timbre_weights[i]:.3f}, prosody={normalized_prosody_weights[i]:.3f}")
     
-    # Blend timbre and prosody separately
+    # Step 3: Blend timbre and prosody separately across speakers
     # ref_s structure: [timbre (128 dims), prosody (128 dims)]
-    blended_timbre = torch.zeros_like(styles[0][:, :128])
-    blended_prosody = torch.zeros_like(styles[0][:, 128:])
+    blended_timbre = torch.zeros_like(speaker_embeddings[0][:, :128])
+    blended_prosody = torch.zeros_like(speaker_embeddings[0][:, 128:])
     
-    for i, style in enumerate(styles):
+    for i, style in enumerate(speaker_embeddings):
         timbre = style[:, :128]
         prosody = style[:, 128:]
         
@@ -1384,8 +1467,8 @@ def main():
     # Initialize models
     initialize_models()
     
-    # Compute style embedding from multiple references
-    ref_s = blend_multiple_references(config['references']['files'], config_path)
+    # Compute style embedding from multiple speakers (with averaging within each speaker)
+    ref_s = blend_multiple_speakers(config['references']['speakers'], config_path)
     if ref_s is None:
         return
     
