@@ -120,7 +120,7 @@ def main():
     print(f"Total combinations: {total_combinations}")
     print(f"Successful: {successful}")
     print(f"Failed: {failed}")
-    print(f"Output directory: {output_dir}")
+    print(f"Output directory: {args.output_dir}")
     print("=" * 80)
 
 

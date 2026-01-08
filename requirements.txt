@@ -36,3 +36,5 @@ typing-extensions>=4.0.0
 # Note: monotonic_align needs to be installed from git:
 # pip install git+https://github.com/resemble-ai/monotonic_align.git
 
+# Whisper for transcription
+openai-whisper
