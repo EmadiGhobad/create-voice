@@ -886,7 +886,6 @@ def validate_config(config, config_path):
         'beta',
         'embedding-scale',
         'references',
-        'output-path',
         'max-tokens',
         'crossfade-ms',
         'normalize',
@@ -1025,10 +1024,12 @@ def validate_config(config, config_path):
 
 
 def parse_arguments():
-    """Parse command line arguments (legacy support - now expects config file path)"""
+    """Parse command line arguments"""
     parser = argparse.ArgumentParser(description='StyleTTS2 Text-to-Speech Inference')
     parser.add_argument('--config', type=str, required=True,
                         help='Path to JSON configuration file (required)')
+    parser.add_argument('--output-path', type=str, required=True,
+                        help='Output directory path for generated audio files (required)')
     
     return parser.parse_args()
 
@@ -1058,21 +1059,22 @@ def generate_config_hash(config):
     return hash_hex[:12]
 
 
-def generate_output_path(config):
+def generate_output_path(output_dir, batch_id, config_hash):
     """
-    Generate output file path from config.
+    Generate output file path from parameters.
     Creates a subfolder batch-{batch-id} in the output directory.
-    Uses config hash instead of voice-id for filename.
+    Uses config hash for filename.
     
     Args:
-        config: Configuration dictionary
+        output_dir: Output directory path (string or Path)
+        batch_id: Batch ID from config
+        config_hash: Hash of the config (12-character string)
     
     Returns:
         Path object for output file
     """
-    output_dir = Path(config['output-path'])
-    batch_id = config['batch-id']
-    config_hash = generate_config_hash(config)
+    output_dir = Path(output_dir)
+    batch_id = batch_id
     
     # Create batch subfolder: {output-path}/batch-{batch-id}
     batch_dir = output_dir / f"batch-{batch_id}"
@@ -1468,12 +1470,15 @@ def save_output(wav, output_path, elapsed_time):
 
 def main():
     """Main function to run inference"""
-    # Parse arguments (now expects --config)
+    # Parse arguments
     args = parse_arguments()
     
     # Load and validate config file
     config = load_config_file(args.config)
     config_path = Path(args.config)
+    
+    # Calculate config hash once (reused for filename generation)
+    config_hash = generate_config_hash(config)
     
     # Extract text from config
     text = config['texts']['content'].strip()
@@ -1482,6 +1487,7 @@ def main():
         sys.exit(1)
     
     print(f"\nText length: {len(text)} characters")
+    print(f"Config hash: {config_hash}")
     
     # Load pronunciation dictionary
     dict_path = config['pronunciation-dict']
@@ -1517,15 +1523,14 @@ def main():
         chunk_by_sentences=chunk_by_sentences
     )
     
-    # Generate and save output path
-    output_path = generate_output_path(config)
+    # Generate and save output path using command-line output-path and calculated hash
+    output_path = generate_output_path(args.output_path, config['batch-id'], config_hash)
     save_output(wav, str(output_path), elapsed)
     
-    # Save config copy with updated output-path
-    save_config_copy(config, output_path)
-    
-    # Save config copy with updated output-path
-    save_config_copy(config, output_path)
+    # Save config copy with updated output-path (add it to config for saving)
+    config_with_output = copy.deepcopy(config)
+    config_with_output['output-path'] = str(output_path).replace('\\', '/')
+    save_config_copy(config_with_output, output_path)
 
 
 if __name__ == "__main__":
