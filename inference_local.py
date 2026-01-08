@@ -6,6 +6,7 @@ Based on the Inference_LibriTTS.ipynb notebook
 import os
 import sys
 import time
+import copy
 from datetime import datetime
 import torch
 
@@ -830,75 +831,237 @@ def inference_chunked(text, ref_s, max_tokens, alpha=0.3, beta=0.7, diffusion_st
     return final_audio
 
 
+def load_config_file(config_path):
+    """
+    Load and validate configuration from JSON file.
+    
+    Args:
+        config_path: Path to JSON configuration file
+    
+    Returns:
+        Dictionary containing validated configuration
+    
+    Raises:
+        SystemExit: If config file is invalid or missing required fields
+    """
+    config_file = Path(config_path)
+    
+    if not config_file.exists():
+        print(f"Error: Config file not found: {config_file}")
+        sys.exit(1)
+    
+    try:
+        with open(config_file, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+    except json.JSONDecodeError as e:
+        print(f"Error: Invalid JSON in config file: {e}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"Error reading config file {config_file}: {e}")
+        sys.exit(1)
+    
+    # Validate required fields
+    validate_config(config, config_file)
+    
+    return config
+
+
+def validate_config(config, config_path):
+    """
+    Validate that all required fields are present in the config.
+    
+    Args:
+        config: Configuration dictionary
+        config_path: Path to config file (for error messages)
+    
+    Raises:
+        SystemExit: If required fields are missing
+    """
+    required_fields = [
+        'batch-id',
+        'voice-id',
+        'texts',
+        'steps',
+        'alpha',
+        'beta',
+        'embedding-scale',
+        'references',
+        'output-path',
+        'max-tokens',
+        'crossfade-ms',
+        'normalize',
+        'pronunciation-dict',
+        'debug-chunks'
+    ]
+    
+    missing_fields = []
+    for field in required_fields:
+        if field not in config:
+            missing_fields.append(field)
+    
+    if missing_fields:
+        print(f"Error: Missing required fields in config file {config_path}:")
+        for field in missing_fields:
+            print(f"  - {field}")
+        sys.exit(1)
+    
+    # Validate texts structure
+    if 'content' not in config['texts']:
+        print(f"Error: Missing 'content' in 'texts' section")
+        sys.exit(1)
+    
+    if 'chunk-policy' not in config['texts']:
+        print(f"Error: Missing 'chunk-policy' in 'texts' section")
+        sys.exit(1)
+    
+    chunk_policy = config['texts']['chunk-policy']
+    if chunk_policy not in ['Token', 'Sentence']:
+        print(f"Error: 'chunk-policy' must be 'Token' or 'Sentence', got '{chunk_policy}'")
+        sys.exit(1)
+    
+    # Validate references structure
+    if 'files' not in config['references']:
+        print(f"Error: Missing 'files' in 'references' section")
+        sys.exit(1)
+    
+    if not isinstance(config['references']['files'], list) or len(config['references']['files']) == 0:
+        print(f"Error: 'references.files' must be a non-empty list")
+        sys.exit(1)
+    
+    # Validate each reference file
+    for i, ref_file in enumerate(config['references']['files']):
+        if 'path' not in ref_file:
+            print(f"Error: Missing 'path' in references.files[{i}]")
+            sys.exit(1)
+        
+        if 'timbre-weight' not in ref_file:
+            print(f"Error: Missing 'timbre-weight' in references.files[{i}]")
+            sys.exit(1)
+        
+        if 'prosody-weight' not in ref_file:
+            print(f"Error: Missing 'prosody-weight' in references.files[{i}]")
+            sys.exit(1)
+        
+        # Validate weights are numbers
+        try:
+            float(ref_file['timbre-weight'])
+            float(ref_file['prosody-weight'])
+        except (ValueError, TypeError):
+            print(f"Error: 'timbre-weight' and 'prosody-weight' must be numbers in references.files[{i}]")
+            sys.exit(1)
+        
+        # Validate file exists
+        ref_path = Path(ref_file['path'])
+        if not ref_path.is_absolute():
+            # Try relative to current working directory first
+            ref_path_cwd = Path.cwd() / ref_path
+            # Also try relative to config file directory
+            ref_path_config = config_path.parent / ref_path
+            
+            if ref_path_cwd.exists():
+                ref_path = ref_path_cwd
+            elif ref_path_config.exists():
+                ref_path = ref_path_config
+            else:
+                # Use the working directory path for error message
+                ref_path = ref_path_cwd
+        
+        if not ref_path.exists():
+            print(f"Error: Reference audio file not found: {ref_path}")
+            print(f"  Tried: {Path.cwd() / Path(ref_file['path'])}")
+            print(f"  Tried: {config_path.parent / Path(ref_file['path'])}")
+            sys.exit(1)
+    
+    # Validate numeric parameters
+    try:
+        float(config['alpha'])
+        float(config['beta'])
+        float(config['embedding-scale'])
+        int(config['steps'])
+        int(config['max-tokens'])
+        int(config['crossfade-ms'])
+    except (ValueError, TypeError) as e:
+        print(f"Error: Invalid numeric parameter in config: {e}")
+        sys.exit(1)
+    
+    # Validate boolean parameters
+    if not isinstance(config['normalize'], bool):
+        print(f"Error: 'normalize' must be a boolean (true/false)")
+        sys.exit(1)
+    
+    if not isinstance(config['debug-chunks'], bool):
+        print(f"Error: 'debug-chunks' must be a boolean (true/false)")
+        sys.exit(1)
+    
+    # Validate pronunciation-dict (can be null or a string path)
+    if config['pronunciation-dict'] is not None and not isinstance(config['pronunciation-dict'], str):
+        print(f"Error: 'pronunciation-dict' must be null or a string path")
+        sys.exit(1)
+    
+    print(f"✓ Config file validated: {config_path}")
+
+
 def parse_arguments():
-    """Parse command line arguments"""
+    """Parse command line arguments (legacy support - now expects config file path)"""
     parser = argparse.ArgumentParser(description='StyleTTS2 Text-to-Speech Inference')
-    parser.add_argument('--text-file', type=str, required=True,
-                        help='Path to text file containing the text to synthesize (required)')
-    parser.add_argument('--reference', type=str, default=None,
-                        help='Path to reference audio file for speaker voice (default: first WAV file found)')
-    parser.add_argument('--emotion', type=str, default=None,
-                        help='Path to reference audio file for emotion/prosody (optional, blends with --reference)')
-    parser.add_argument('--emotion-blend', type=float, default=0.7,
-                        help='Emotion blend ratio: 0=only speaker prosody, 1=only emotion prosody (default: 0.7)')
-    parser.add_argument('--output', type=str, default='output.wav',
-                        help='Output audio file path (default: output.wav)')
-    parser.add_argument('--alpha', type=float, default=0.3,
-                        help='Timbre control: 0=reference, 1=sampled (default: 0.3)')
-    parser.add_argument('--beta', type=float, default=0.7,
-                        help='Prosody control: 0=reference, 1=sampled (default: 0.7)')
-    parser.add_argument('--steps', type=int, default=5,
-                        help='Number of diffusion steps (default: 5)')
-    # todo, check it like alpha, beta, for the embedding-scale also, to see the experimental result of it
-    parser.add_argument('--embedding-scale', type=float, default=1.0,
-                        help='Embedding scale for style (default: 1.0)')
-    parser.add_argument('--max-tokens', type=int, default=512,
-                        help='Maximum tokens per chunk for long texts (default: 450)')
-    parser.add_argument('--chunk-by-sentences', action='store_true',
-                        help='Split text by sentences only (separated by dots), ignoring token capacity. If not set, uses token-capacity based chunking.')
-    parser.add_argument('--crossfade-ms', type=int, default=50,
-                        help='Crossfade duration in milliseconds for chunk concatenation (default: 50)')
-    parser.add_argument('--disable-normalization', action='store_true',
-                        help='Disable text normalization for pronunciation improvement (default: normalization enabled)')
-    parser.add_argument('--pronunciation-dict', type=str, default=None,
-                        help='Path to pronunciation dictionary JSON file (default: pronunciation_dict.json in script directory)')
-    parser.add_argument('--debug-chunks', action='store_true',
-                        help='Save individual chunk audio files and metadata for debugging (saves to debug_output_TIMESTAMP/ directory)')
+    parser.add_argument('--config', type=str, required=True,
+                        help='Path to JSON configuration file (required)')
     
     return parser.parse_args()
 
 
-def load_text_from_file(text_file_path):
+def generate_output_path(config):
     """
-    Load text from a file.
+    Generate output file path from config.
+    Creates a subfolder batch-{batch-id} in the output directory.
     
     Args:
-        text_file_path: Path to the text file
+        config: Configuration dictionary
     
     Returns:
-        Text content as string
+        Path object for output file
     """
-    text_path = Path(text_file_path)
+    output_dir = Path(config['output-path'])
+    batch_id = config['batch-id']
+    voice_id = config['voice-id']
     
-    if not text_path.exists():
-        print(f"Error: Text file not found: {text_path}")
-        sys.exit(1)
+    # Create batch subfolder: {output-path}/batch-{batch-id}
+    batch_dir = output_dir / f"batch-{batch_id}"
+    batch_dir.mkdir(parents=True, exist_ok=True)
     
+    # Generate filename: batch-{batch-id}_voice-{voice-id}.wav
+    filename = f"batch-{batch_id}_voice-{voice_id}.wav"
+    output_path = batch_dir / filename
+    
+    return output_path
+
+
+def save_config_copy(config, output_path):
+    """
+    Save a copy of the config file alongside the output with updated output-path.
+    
+    Args:
+        config: Configuration dictionary (original will not be modified)
+        output_path: Path object for the output audio file
+    """
+    # Create a deep copy of the config to avoid modifying the original
+    config_copy = copy.deepcopy(config)
+    
+    # Update output-path to the exact output file path
+    # Convert to string and use forward slashes for consistency
+    output_path_str = str(output_path).replace('\\', '/')
+    config_copy['output-path'] = output_path_str
+    
+    # Generate config file path: same name as output but with .json extension
+    config_output_path = output_path.with_suffix('.json')
+    
+    # Save the config file
     try:
-        with open(text_path, 'r', encoding='utf-8') as f:
-            text = f.read().strip()
-        
-        if not text:
-            print(f"Error: Text file is empty: {text_path}")
-            sys.exit(1)
-        
-        print(f"Loaded text from: {text_path}")
-        print(f"Text length: {len(text)} characters")
-        return text
-    
+        with open(config_output_path, 'w', encoding='utf-8') as f:
+            json.dump(config_copy, f, indent=2, ensure_ascii=False)
+        print(f"  Config saved to: {config_output_path}")
     except Exception as e:
-        print(f"Error reading text file {text_path}: {e}")
-        sys.exit(1)
+        print(f"Warning: Could not save config file: {e}")
 
 
 def validate_paths():
@@ -959,9 +1122,125 @@ def get_reference_audio_path(reference_path=None):
     return ref_files[0]
 
 
+def compute_style_embedding_single(reference_path):
+    """
+    Compute style embedding from a single reference audio file.
+    
+    Args:
+        reference_path: Path to reference audio file
+    
+    Returns:
+        Style embedding tensor (256 dims: 128 timbre + 128 prosody)
+    """
+    ref_path_obj = Path(reference_path)
+    if not ref_path_obj.exists():
+        print(f"Error: Reference audio file not found: {ref_path_obj}")
+        sys.exit(1)
+    
+    print(f"Computing style from: {ref_path_obj.name}")
+    style = compute_style(str(ref_path_obj))
+    
+    if style is None:
+        print(f"Error: Could not compute style from reference audio: {ref_path_obj}")
+        sys.exit(1)
+    
+    return style
+
+
+def blend_multiple_references(references_list, config_path=None):
+    """
+    Blend multiple reference audio files based on their timbre and prosody weights.
+    
+    Args:
+        references_list: List of dictionaries with keys: 'path', 'timbre-weight', 'prosody-weight'
+        config_path: Optional path to config file (for resolving relative paths)
+    
+    Returns:
+        Blended style embedding tensor (256 dims: 128 timbre + 128 prosody)
+    """
+    if not references_list:
+        print("Error: No reference files provided")
+        sys.exit(1)
+    
+    # Compute style embeddings for all references
+    styles = []
+    timbre_weights = []
+    prosody_weights = []
+    
+    print(f"\nProcessing {len(references_list)} reference file(s)...")
+    
+    for i, ref_info in enumerate(references_list):
+        ref_path = Path(ref_info['path'])
+        
+        # Resolve relative paths - try working directory first, then config directory
+        if not ref_path.is_absolute():
+            ref_path_cwd = Path.cwd() / ref_path
+            if config_path:
+                ref_path_config = config_path.parent / ref_path
+            else:
+                ref_path_config = None
+            
+            if ref_path_cwd.exists():
+                ref_path = ref_path_cwd
+            elif ref_path_config and ref_path_config.exists():
+                ref_path = ref_path_config
+            else:
+                # Use working directory path as default
+                ref_path = ref_path_cwd
+        
+        # Compute style embedding
+        style = compute_style_embedding_single(ref_path)
+        styles.append(style)
+        
+        # Get weights
+        timbre_weight = float(ref_info['timbre-weight'])
+        prosody_weight = float(ref_info['prosody-weight'])
+        
+        timbre_weights.append(timbre_weight)
+        prosody_weights.append(prosody_weight)
+        
+        print(f"  Reference {i+1}: {ref_path.name} (timbre-weight: {timbre_weight}, prosody-weight: {prosody_weight})")
+    
+    # Normalize weights (sum to 1.0) so higher weights have bigger impact
+    timbre_weight_sum = sum(timbre_weights)
+    prosody_weight_sum = sum(prosody_weights)
+    
+    if timbre_weight_sum == 0:
+        print("Error: Sum of timbre-weights is zero")
+        sys.exit(1)
+    if prosody_weight_sum == 0:
+        print("Error: Sum of prosody-weights is zero")
+        sys.exit(1)
+    
+    # Normalize weights
+    normalized_timbre_weights = [w / timbre_weight_sum for w in timbre_weights]
+    normalized_prosody_weights = [w / prosody_weight_sum for w in prosody_weights]
+    
+    print(f"\nBlending references:")
+    print(f"  Timbre weights (normalized): {[f'{w:.3f}' for w in normalized_timbre_weights]}")
+    print(f"  Prosody weights (normalized): {[f'{w:.3f}' for w in normalized_prosody_weights]}")
+    
+    # Blend timbre and prosody separately
+    # ref_s structure: [timbre (128 dims), prosody (128 dims)]
+    blended_timbre = torch.zeros_like(styles[0][:, :128])
+    blended_prosody = torch.zeros_like(styles[0][:, 128:])
+    
+    for i, style in enumerate(styles):
+        timbre = style[:, :128]
+        prosody = style[:, 128:]
+        
+        blended_timbre += normalized_timbre_weights[i] * timbre
+        blended_prosody += normalized_prosody_weights[i] * prosody
+    
+    # Concatenate blended timbre and prosody
+    ref_s = torch.cat([blended_timbre, blended_prosody], dim=1)
+    
+    return ref_s
+
+
 def compute_style_embedding(speaker_path, emotion_path=None, emotion_blend=0.7):
     """
-    Compute and blend style embeddings from reference audio files.
+    Compute and blend style embeddings from reference audio files (legacy function for backward compatibility).
     
     Args:
         speaker_path: Path to speaker reference audio
@@ -1057,10 +1336,17 @@ def save_output(wav, output_path, elapsed_time):
     
     Args:
         wav: Audio array
-        output_path: Output file path
+        output_path: Output file path (can be absolute or relative)
         elapsed_time: Processing time in seconds
     """
-    output_path_obj = Path(__file__).parent / output_path
+    output_path_obj = Path(output_path)
+    # If relative path, make it relative to script directory
+    if not output_path_obj.is_absolute():
+        output_path_obj = Path(__file__).parent / output_path_obj
+    
+    # Ensure parent directory exists
+    output_path_obj.parent.mkdir(parents=True, exist_ok=True)
+    
     sf.write(str(output_path_obj), wav, 24000)
     
     audio_duration = len(wav) / 24000
@@ -1073,14 +1359,23 @@ def save_output(wav, output_path, elapsed_time):
 
 def main():
     """Main function to run inference"""
-    # Parse arguments
+    # Parse arguments (now expects --config)
     args = parse_arguments()
     
-    # Load text from file
-    text = load_text_from_file(args.text_file)
+    # Load and validate config file
+    config = load_config_file(args.config)
+    config_path = Path(args.config)
+    
+    # Extract text from config
+    text = config['texts']['content'].strip()
+    if not text:
+        print("Error: Text content is empty in config")
+        sys.exit(1)
+    
+    print(f"\nText length: {len(text)} characters")
     
     # Load pronunciation dictionary
-    dict_path = args.pronunciation_dict
+    dict_path = config['pronunciation-dict']
     load_pronunciation_dictionary(dict_path)
     
     # Validate paths
@@ -1089,27 +1384,39 @@ def main():
     # Initialize models
     initialize_models()
     
-    # Get reference audio path
-    speaker_path = get_reference_audio_path(args.reference)
-    if speaker_path is None:
-        return
-    
-    # Compute style embedding
-    ref_s = compute_style_embedding(speaker_path, args.emotion, args.emotion_blend)
+    # Compute style embedding from multiple references
+    ref_s = blend_multiple_references(config['references']['files'], config_path)
     if ref_s is None:
         return
     
+    # Determine chunk policy
+    chunk_policy = config['texts']['chunk-policy']
+    chunk_by_sentences = (chunk_policy == 'Sentence')
+    
     # Synthesize text
-    normalize = not args.disable_normalization
     wav, elapsed = synthesize_text(
-        text, ref_s, args.alpha, args.beta, args.steps,
-        args.embedding_scale, args.max_tokens, args.crossfade_ms, 
-        normalize=normalize, dict_path=dict_path, debug_chunks=args.debug_chunks,
-        chunk_by_sentences=args.chunk_by_sentences
+        text, ref_s, 
+        alpha=config['alpha'],
+        beta=config['beta'],
+        steps=config['steps'],
+        embedding_scale=config['embedding-scale'],
+        max_tokens=config['max-tokens'],
+        crossfade_ms=config['crossfade-ms'],
+        normalize=config['normalize'],
+        dict_path=dict_path,
+        debug_chunks=config['debug-chunks'],
+        chunk_by_sentences=chunk_by_sentences
     )
     
-    # Save output
-    save_output(wav, args.output, elapsed)
+    # Generate and save output path
+    output_path = generate_output_path(config)
+    save_output(wav, str(output_path), elapsed)
+    
+    # Save config copy with updated output-path
+    save_config_copy(config, output_path)
+    
+    # Save config copy with updated output-path
+    save_config_copy(config, output_path)
 
 
 if __name__ == "__main__":
