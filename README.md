@@ -650,7 +650,10 @@ The script automatically detects CUDA availability. To force CPU usage, modify:
 ```python
 device = 'cpu'  # Force CPU
 ```
-
+## Whisper transcription
+```bash
+python whisper-transcribe.py --media-file input/speaker/Julia\ Whelan_000105-000115.wav
+```
 ## Notes
 
 - The first run may take longer as models are loaded

@@ -787,15 +787,7 @@ def inference_chunked(text, ref_s, max_tokens, alpha=0.3, beta=0.7, diffusion_st
     Returns:
         Concatenated audio array
     """
-    # Check if text needs chunking
-    # token_count = count_tokens(text, normalize=normalize)
-    #
-    # if token_count <= max_tokens:
-    #     # Single chunk, use regular inference
-    #     return inference(text, ref_s, alpha, beta, diffusion_steps, embedding_scale, normalize=normalize, dict_path=dict_path)
-    
     # Split into chunks
-    # print(f"Text is too long ({token_count} tokens), splitting into chunks...")
     if chunk_by_sentences:
         chunks = split_text_into_sentences(text)
         print(f"Split into {len(chunks)} chunks (sentence-by-sentence mode)")
