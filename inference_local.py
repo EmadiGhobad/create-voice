@@ -819,7 +819,7 @@ def save_chunks_metadata(chunk_metadata, total_chunks, max_tokens, crossfade_ms,
 
 
 def inference_chunked(text, ref_s, max_tokens, alpha=0.3, beta=0.7, diffusion_steps=5,
-                      embedding_scale=1, crossfade_ms=50, normalize=True, dict_path=None, debug_chunks=False, chunk_by_sentences=False):
+                      embedding_scale=1, crossfade_ms=50, normalize=True, dict_path=None, debug_chunks=False, chunk_by_sentences=False, output_path=None):
     """
     Perform text-to-speech inference for long texts by splitting into chunks.
     
@@ -853,10 +853,19 @@ def inference_chunked(text, ref_s, max_tokens, alpha=0.3, beta=0.7, diffusion_st
     # Create debug directory if needed
     debug_dir = None
     if debug_chunks:
-        # Create timestamped debug folder to avoid overriding previous runs
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        debug_dir = Path(__file__).parent / f"debug_output_{timestamp}"
-        debug_dir.mkdir(exist_ok=True)
+        if output_path:
+            # Create debug folder in the same directory as output, with name based on output file
+            output_path_obj = Path(output_path)
+            # Get the output filename without extension (e.g., "batch-1_a1b2c3d4e5f6")
+            output_name = output_path_obj.stem
+            # Create debug folder: {batch-id}/debug_{output_name}
+            debug_dir = output_path_obj.parent / f"debug_{output_name}"
+        else:
+            # Fallback: Create timestamped debug folder in script directory
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            debug_dir = Path(__file__).parent / f"debug_output_{timestamp}"
+        
+        debug_dir.mkdir(parents=True, exist_ok=True)
         print(f"Debug mode enabled: Saving chunks to {debug_dir}")
     
     for i, chunk in enumerate(chunks):
@@ -1457,7 +1466,7 @@ def compute_style_embedding(speaker_path, emotion_path=None, emotion_blend=0.7):
     return ref_s
 
 
-def synthesize_text(text, ref_s, alpha, beta, steps, embedding_scale, max_tokens, crossfade_ms, normalize=True, dict_path=None, debug_chunks=False, chunk_by_sentences=False):
+def synthesize_text(text, ref_s, alpha, beta, steps, embedding_scale, max_tokens, crossfade_ms, normalize=True, dict_path=None, debug_chunks=False, chunk_by_sentences=False, output_path=None):
     """
     Synthesize text to speech, handling chunking for long texts.
     
@@ -1472,6 +1481,7 @@ def synthesize_text(text, ref_s, alpha, beta, steps, embedding_scale, max_tokens
         crossfade_ms: Crossfade duration in milliseconds
         normalize: Whether to normalize text for pronunciation (default: True)
         chunk_by_sentences: If True, split by sentences only. If False, split by token capacity.
+        output_path: Optional output file path (used for debug folder location)
     
     Returns:
         Audio array and processing time
@@ -1488,7 +1498,7 @@ def synthesize_text(text, ref_s, alpha, beta, steps, embedding_scale, max_tokens
         text, ref_s, max_tokens, alpha=alpha, beta=beta,
         diffusion_steps=steps, embedding_scale=embedding_scale,
         crossfade_ms=crossfade_ms, normalize=normalize, dict_path=dict_path, debug_chunks=debug_chunks,
-        chunk_by_sentences=chunk_by_sentences
+        chunk_by_sentences=chunk_by_sentences, output_path=output_path
     )
     elapsed = time.time() - start_time
 
@@ -1562,7 +1572,10 @@ def main():
     chunk_policy = config['texts']['chunk-policy']
     chunk_by_sentences = (chunk_policy == 'Sentence')
     
-    # Synthesize text
+    # Generate output path first (needed for debug folder location)
+    output_path = generate_output_path(args.output_path, config['batch-id'], config_hash)
+    
+    # Synthesize text (pass output_path for debug folder location)
     wav, elapsed = synthesize_text(
         text, ref_s, 
         alpha=config['alpha'],
@@ -1574,11 +1587,11 @@ def main():
         normalize=config['normalize'],
         dict_path=dict_path,
         debug_chunks=config['debug-chunks'],
-        chunk_by_sentences=chunk_by_sentences
+        chunk_by_sentences=chunk_by_sentences,
+        output_path=str(output_path)
     )
     
-    # Generate and save output path using command-line output-path and calculated hash
-    output_path = generate_output_path(args.output_path, config['batch-id'], config_hash)
+    # Save output
     save_output(wav, str(output_path), elapsed)
     
     # Save config copy with updated output-path (add it to config for saving)
