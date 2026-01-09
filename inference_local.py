@@ -8,6 +8,7 @@ import sys
 import time
 import copy
 import hashlib
+import shutil
 from datetime import datetime
 import torch
 
@@ -864,10 +865,10 @@ def inference_chunked(text, ref_s, max_tokens, alpha=0.3, beta=0.7, diffusion_st
         if output_path:
             # Create debug folder in the same directory as output, with name based on output file
             output_path_obj = Path(output_path)
-            # Get the output filename without extension (e.g., "batch-1_a1b2c3d4e5f6")
+            # Get the output filename without extension (e.g., "proper-name_1736452800_a0.2b0.65s12es1.3_abc123")
             output_name = output_path_obj.stem
-            # Create debug folder: {batch-id}/debug_{output_name}
-            debug_dir = output_path_obj.parent / f"debug_{output_name}"
+            # Create debug folder: {batch-id}/{output_name}_debug
+            debug_dir = output_path_obj.parent / f"{output_name}_debug"
         else:
             # Fallback: Create timestamped debug folder in script directory
             timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -1138,16 +1139,17 @@ def generate_config_hash(config):
     return hash_hex[:12]
 
 
-def generate_output_path(output_dir, batch_id, reference_id, config_hash, alpha, beta, steps, embedding_scale):
+def generate_output_path(output_dir, batch_id, reference_id, timestamp, config_hash, alpha, beta, steps, embedding_scale):
     """
     Generate output file path from parameters.
     Creates nested subfolders: batch-{batch-id}/{reference-id} in the output directory.
-    Uses reference-id prefix and parameter suffix with config hash for filename.
+    Uses reference-id prefix, timestamp, and parameter suffix with config hash for filename.
     
     Args:
         output_dir: Output directory path (string or Path)
         batch_id: Batch ID from config
         reference_id: Reference ID from config (used for folder and filename prefix)
+        timestamp: Unix timestamp (integer) for unique identification
         config_hash: Hash of the config (12-character string)
         alpha: Alpha parameter value
         beta: Beta parameter value
@@ -1164,13 +1166,13 @@ def generate_output_path(output_dir, batch_id, reference_id, config_hash, alpha,
     reference_dir = batch_dir / reference_id
     reference_dir.mkdir(parents=True, exist_ok=True)
     
-    # Generate filename: {reference-id}_a{alpha}b{beta}s{steps}es{embedding-scale}_{hash}.wav
+    # Generate filename: {reference-id}_{timestamp}_a{alpha}b{beta}s{steps}es{embedding-scale}_{hash}.wav
     # Format numbers to remove unnecessary decimals (e.g., 0.2 -> 0.2, 1.0 -> 1)
     alpha_str = f"{alpha:g}"  # :g removes trailing zeros
     beta_str = f"{beta:g}"
     embedding_scale_str = f"{embedding_scale:g}"
     
-    filename = f"{reference_id}_a{alpha_str}b{beta_str}s{steps}es{embedding_scale_str}_{config_hash}.wav"
+    filename = f"{reference_id}_{timestamp}_a{alpha_str}b{beta_str}s{steps}es{embedding_scale_str}_{config_hash}.wav"
     output_path = reference_dir / filename
     
     return output_path
@@ -1202,6 +1204,71 @@ def save_config_copy(config, output_path):
         print(f"  Config saved to: {config_output_path}")
     except Exception as e:
         print(f"Warning: Could not save config file: {e}")
+
+
+def determine_quality_folder(naturalness_score):
+    """
+    Determine quality folder name based on naturalness score.
+    
+    Args:
+        naturalness_score: Naturalness score (0-10)
+    
+    Returns:
+        Quality folder name string
+    """
+    if naturalness_score >= 8.0:
+        return "1-excellent"
+    elif naturalness_score >= 6.5:
+        return "2-good"
+    elif naturalness_score >= 5.0:
+        return "3-fair"
+    else:
+        return "4-review"
+
+
+def organize_output_by_quality(wav_path, analysis):
+    """
+    Move generated files to quality-based subfolder after analysis.
+    Moves WAV file and debug folder (if exists) and returns new path for saving config/analysis.
+    
+    Args:
+        wav_path: Path to generated WAV file
+        analysis: Analysis dictionary containing quality scores
+    
+    Returns:
+        New Path object for the moved WAV file
+    """
+    wav_path = Path(wav_path)
+    
+    # Determine quality folder
+    naturalness_score = analysis['quality_assessment']['naturalness_score']
+    quality_folder = determine_quality_folder(naturalness_score)
+    
+    # Create quality subfolder in the reference directory
+    # Current structure: {output-path}/batch-{batch-id}/{reference-id}/{filename}.wav
+    # New structure: {output-path}/batch-{batch-id}/{reference-id}/{quality-folder}/{filename}.wav
+    reference_dir = wav_path.parent
+    quality_dir = reference_dir / quality_folder
+    quality_dir.mkdir(parents=True, exist_ok=True)
+    
+    # New path for WAV file
+    new_wav_path = quality_dir / wav_path.name
+    
+    # Move WAV file
+    shutil.move(str(wav_path), str(new_wav_path))
+    
+    # Move debug folder if it exists
+    debug_folder_name = f"{wav_path.stem}_debug"
+    debug_folder_path = reference_dir / debug_folder_name
+    if debug_folder_path.exists() and debug_folder_path.is_dir():
+        new_debug_path = quality_dir / debug_folder_name
+        shutil.move(str(debug_folder_path), str(new_debug_path))
+        print(f"  Organized into: {quality_folder}/ (Naturalness: {naturalness_score}/10)")
+        print(f"  Debug folder moved: {debug_folder_name}/")
+    else:
+        print(f"  Organized into: {quality_folder}/ (Naturalness: {naturalness_score}/10)")
+    
+    return new_wav_path
 
 
 def validate_paths():
@@ -1567,6 +1634,9 @@ def main():
     config = load_config_file(args.config)
     config_path = Path(args.config)
     
+    # Generate timestamp once (used for all files to ensure consistent naming)
+    generation_timestamp = int(time.time())
+    
     # Calculate config hash once (reused for filename generation)
     config_hash = generate_config_hash(config)
     
@@ -1578,6 +1648,7 @@ def main():
     
     print(f"\nText length: {len(text)} characters")
     print(f"Config hash: {config_hash}")
+    print(f"Generation timestamp: {generation_timestamp}")
     
     # Load pronunciation dictionary (resolve path relative to config file if needed)
     dict_path = config['pronunciation-dict']
@@ -1603,6 +1674,7 @@ def main():
         args.output_path, 
         config['batch-id'],
         config['references']['id'],
+        generation_timestamp,
         config_hash,
         config['alpha'],
         config['beta'],
@@ -1629,15 +1701,13 @@ def main():
     # Save output
     save_output(wav, str(output_path), elapsed)
     
-    # Analyze voice and save analysis
+    # Analyze voice and organize by quality
+    final_output_path = output_path  # Default to original path if analysis fails
+    
     if analyze_voice is not None:
         print("\n📊 Analyzing voice characteristics...")
         try:
             analysis = analyze_voice(str(output_path), text=text)
-            
-            # Save analysis with naming: {filename}_analysis.json
-            analysis_path = output_path.with_name(f"{output_path.stem}_analysis.json")
-            save_analysis(analysis, str(analysis_path))
             
             # Print brief summary
             print(f"  Quality: {analysis['quality_assessment']['overall_quality']} "
@@ -1646,13 +1716,25 @@ def main():
             print(f"  Tags: {analysis['derived_tags']['gender']}, "
                   f"{analysis['derived_tags']['age_category']}, "
                   f"{', '.join(analysis['derived_tags']['tone'][:2])}")
+            
+            # Organize files into quality-based subfolder
+            print("\n📁 Organizing by quality...")
+            final_output_path = organize_output_by_quality(output_path, analysis)
+            
+            # Save analysis in quality folder with naming: {filename}_analysis.json
+            analysis_path = final_output_path.with_name(f"{final_output_path.stem}_analysis.json")
+            save_analysis(analysis, str(analysis_path))
+            
         except Exception as e:
-            print(f"  Warning: Voice analysis failed: {e}")
+            print(f"  Warning: Voice analysis/organization failed: {e}")
+            print(f"  Files remain in: {output_path.parent}")
+    else:
+        print("\n⚠️  Voice analysis not available - files saved without quality organization")
     
     # Save config copy with updated output-path (add it to config for saving)
     config_with_output = copy.deepcopy(config)
-    config_with_output['output-path'] = str(output_path).replace('\\', '/')
-    save_config_copy(config_with_output, output_path)
+    config_with_output['output-path'] = str(final_output_path).replace('\\', '/')
+    save_config_copy(config_with_output, final_output_path)
 
 
 if __name__ == "__main__":
