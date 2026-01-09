@@ -816,6 +816,74 @@ def save_analysis(analysis, output_path):
     print(f"Analysis saved to: {output_path}")
 
 
+def validate_reference_quality(analysis):
+    """
+    Validate if audio is suitable as a StyleTTS2 reference.
+    
+    Args:
+        analysis: Analysis dictionary from analyze_voice()
+    
+    Returns:
+        Tuple of (quality_level, is_suitable, recommendation)
+        quality_level: "excellent", "good", "poor"
+        is_suitable: bool
+        recommendation: string with advice
+    """
+    qa = analysis['quality_assessment']
+    vq = analysis['acoustic_metrics']['voice_quality']
+    
+    naturalness = qa['naturalness_score']
+    hnr = vq['hnr_db']
+    jitter = vq['jitter_percent']
+    shimmer = vq['shimmer_percent']
+    
+    # Excellent reference
+    if naturalness >= 8.0 and hnr > 15 and jitter < 1.0 and shimmer < 5.0:
+        return (
+            "excellent",
+            True,
+            "✅ EXCELLENT reference quality! Safe to use for StyleTTS2."
+        )
+    
+    # Good reference
+    elif naturalness >= 6.5 and hnr >= 12 and jitter < 1.5 and shimmer < 7.0:
+        issues = []
+        if hnr < 15:
+            issues.append("slightly noisy")
+        if jitter >= 1.0:
+            issues.append("minor pitch instability")
+        if shimmer >= 5.0:
+            issues.append("minor amplitude variation")
+        
+        issue_str = ", ".join(issues) if issues else "minor quality issues"
+        return (
+            "good",
+            True,
+            f"✓ GOOD reference quality. Usable but {issue_str}. "
+            "Consider blending with higher-quality references."
+        )
+    
+    # Poor reference
+    else:
+        problems = []
+        if naturalness < 6.5:
+            problems.append(f"low naturalness ({naturalness}/10)")
+        if hnr < 12:
+            problems.append(f"high noise (HNR: {hnr:.1f} dB)")
+        if jitter >= 1.5:
+            problems.append(f"unstable pitch (jitter: {jitter:.1f}%)")
+        if shimmer >= 7.0:
+            problems.append(f"rough voice (shimmer: {shimmer:.1f}%)")
+        
+        problem_str = ", ".join(problems)
+        return (
+            "poor",
+            False,
+            f"⚠️  POOR reference quality: {problem_str}. "
+            "Not recommended for StyleTTS2. Try: better source, different time segment, or audio cleanup."
+        )
+
+
 def main():
     """Main function for standalone usage"""
     parser = argparse.ArgumentParser(description='Analyze voice audio file')
@@ -866,6 +934,17 @@ def main():
             print(f"\n  Warnings:")
             for warning in qa['warnings']:
                 print(f"    - {warning}")
+        
+        # Validate as StyleTTS2 reference
+        print(f"\nStyleTTS2 Reference Quality:")
+        quality_level, is_suitable, recommendation = validate_reference_quality(analysis)
+        print(f"  {recommendation}")
+        
+        vq = analysis['acoustic_metrics']['voice_quality']
+        print(f"\n  Key Metrics for References:")
+        print(f"    HNR: {vq['hnr_db']:.1f} dB (target: >15 dB)")
+        print(f"    Jitter: {vq['jitter_percent']:.2f}% (target: <1%)")
+        print(f"    Shimmer: {vq['shimmer_percent']:.2f}% (target: <5%)")
         
         print("="*60 + "\n")
         
