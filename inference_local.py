@@ -977,6 +977,14 @@ def validate_config(config, config_path):
         sys.exit(1)
     
     # Validate references structure
+    if 'id' not in config['references']:
+        print(f"Error: Missing 'id' in 'references' section")
+        sys.exit(1)
+    
+    if not isinstance(config['references']['id'], str) or not config['references']['id'].strip():
+        print(f"Error: 'references.id' must be a non-empty string")
+        sys.exit(1)
+    
     if 'speakers' not in config['references']:
         print(f"Error: Missing 'speakers' in 'references' section")
         sys.exit(1)
@@ -1122,15 +1130,16 @@ def generate_config_hash(config):
     return hash_hex[:12]
 
 
-def generate_output_path(output_dir, batch_id, config_hash, alpha, beta, steps, embedding_scale):
+def generate_output_path(output_dir, batch_id, reference_id, config_hash, alpha, beta, steps, embedding_scale):
     """
     Generate output file path from parameters.
-    Creates a subfolder batch-{batch-id} in the output directory.
-    Uses parameter prefix and config hash for filename.
+    Creates nested subfolders: batch-{batch-id}/{reference-id} in the output directory.
+    Uses reference-id prefix and parameter suffix with config hash for filename.
     
     Args:
         output_dir: Output directory path (string or Path)
         batch_id: Batch ID from config
+        reference_id: Reference ID from config (used for folder and filename prefix)
         config_hash: Hash of the config (12-character string)
         alpha: Alpha parameter value
         beta: Beta parameter value
@@ -1142,18 +1151,19 @@ def generate_output_path(output_dir, batch_id, config_hash, alpha, beta, steps, 
     """
     output_dir = Path(output_dir)
     
-    # Create batch subfolder: {output-path}/batch-{batch-id}
+    # Create nested subfolders: {output-path}/batch-{batch-id}/{reference-id}
     batch_dir = output_dir / f"batch-{batch_id}"
-    batch_dir.mkdir(parents=True, exist_ok=True)
+    reference_dir = batch_dir / reference_id
+    reference_dir.mkdir(parents=True, exist_ok=True)
     
-    # Generate filename prefix: a{alpha}b{beta}s{steps}es{embedding-scale}_{hash}.wav
+    # Generate filename: {reference-id}_a{alpha}b{beta}s{steps}es{embedding-scale}_{hash}.wav
     # Format numbers to remove unnecessary decimals (e.g., 0.2 -> 0.2, 1.0 -> 1)
     alpha_str = f"{alpha:g}"  # :g removes trailing zeros
     beta_str = f"{beta:g}"
     embedding_scale_str = f"{embedding_scale:g}"
     
-    filename = f"a{alpha_str}b{beta_str}s{steps}es{embedding_scale_str}_{config_hash}.wav"
-    output_path = batch_dir / filename
+    filename = f"{reference_id}_a{alpha_str}b{beta_str}s{steps}es{embedding_scale_str}_{config_hash}.wav"
+    output_path = reference_dir / filename
     
     return output_path
 
@@ -1583,7 +1593,8 @@ def main():
     # Generate output path first (needed for debug folder location)
     output_path = generate_output_path(
         args.output_path, 
-        config['batch-id'], 
+        config['batch-id'],
+        config['references']['id'],
         config_hash,
         config['alpha'],
         config['beta'],

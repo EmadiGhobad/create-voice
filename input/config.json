@@ -9,6 +9,7 @@
   "beta": 0.65,
   "embedding-scale": 1.3,
   "references": {
+	"id": "proper-name",
 	"tags": {
 	  "gender": "Female/Male",
 	  "tone": "choose between comma separated: calm/husky/engaging",
