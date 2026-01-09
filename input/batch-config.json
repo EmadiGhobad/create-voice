@@ -1,0 +1,60 @@
+{
+  "batch-id": 10,
+  "texts": {
+	"content": "She reveals that her own history cultivated this pervasive need for perfection, watching it consumes chunks of her life under the false promise that the resulting success would justify the losses.",
+	"chunk-policy": "Sentence"
+  },
+  "steps": [
+	5,
+	8,
+	25
+  ],
+  "alpha": [
+	0.1,
+	0.2
+  ],
+  "beta": [
+	0.1,
+	0.2
+  ],
+  "embedding-scale": [
+	1,
+	1.3
+  ],
+  "references": [
+	{
+	  "id": "proper-name",
+	  "tags": {
+		"gender": "Female/Male",
+		"tone": "choose between comma separated: calm/husky/engaging",
+		"age": "specify the age: 20s",
+		"usage": "choose between comma separated: audiobooks/storytelling/youtube"
+	  },
+	  "speakers": [
+		{
+		  "name": "Julia Whelan",
+		  "paths": [
+			"input/speaker/real/Julia Whelan_000105-000115.wav"
+		  ],
+		  "sample-prosody-index": -1,
+		  "timbre-weight": 1,
+		  "prosody-weight": 0
+		},
+		{
+		  "name": "she-motivation",
+		  "paths": [
+			"input/speaker/kokoro/heart.wav"
+		  ],
+		  "sample-prosody-index": -1,
+		  "timbre-weight": 1,
+		  "prosody-weight": 1
+		}
+	  ]
+	}
+  ],
+  "max-tokens": 512,
+  "crossfade-ms": 50,
+  "normalize": true,
+  "pronunciation-dict": "pronunciation_dict.json",
+  "debug-chunks": false
+}
