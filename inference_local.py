@@ -41,6 +41,14 @@ from phonemizer.backend import EspeakBackend
 import torchaudio
 import argparse
 
+# Import voice analyzer
+try:
+    from analyze_voice import analyze_voice, save_analysis
+except ImportError:
+    print("Warning: analyze_voice module not found. Voice analysis will be skipped.")
+    analyze_voice = None
+    save_analysis = None
+
 # Add StyleTTS2 to path
 STYLETTS2_DIR = Path(__file__).parent / "StyleTTS2"
 sys.path.insert(0, str(STYLETTS2_DIR))
@@ -1620,6 +1628,26 @@ def main():
     
     # Save output
     save_output(wav, str(output_path), elapsed)
+    
+    # Analyze voice and save analysis
+    if analyze_voice is not None:
+        print("\n📊 Analyzing voice characteristics...")
+        try:
+            analysis = analyze_voice(str(output_path), text=text)
+            
+            # Save analysis with naming: {filename}_analysis.json
+            analysis_path = output_path.with_name(f"{output_path.stem}_analysis.json")
+            save_analysis(analysis, str(analysis_path))
+            
+            # Print brief summary
+            print(f"  Quality: {analysis['quality_assessment']['overall_quality']} "
+                  f"(Naturalness: {analysis['quality_assessment']['naturalness_score']}/10, "
+                  f"Clarity: {analysis['quality_assessment']['clarity_score']}/10)")
+            print(f"  Tags: {analysis['derived_tags']['gender']}, "
+                  f"{analysis['derived_tags']['age_category']}, "
+                  f"{', '.join(analysis['derived_tags']['tone'][:2])}")
+        except Exception as e:
+            print(f"  Warning: Voice analysis failed: {e}")
     
     # Save config copy with updated output-path (add it to config for saving)
     config_with_output = copy.deepcopy(config)
