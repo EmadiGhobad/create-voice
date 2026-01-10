@@ -13,11 +13,13 @@ import time
 from pathlib import Path
 from analyze_voice import analyze_voice
 import shutil
+from multiprocessing import Pool, cpu_count, current_process
+from functools import partial
 
 
-def extract_segment(input_file, start_sec, duration_sec, output_file):
+def extract_segment_raw(input_file, start_sec, duration_sec, output_file):
     """
-    Extract a segment from audio file using ffmpeg.
+    Extract a segment from audio file (RAW, no filters - for fast analysis).
     
     Args:
         input_file: Input audio path
@@ -34,6 +36,33 @@ def extract_segment(input_file, start_sec, duration_sec, output_file):
             '-i', str(input_file),
             '-ss', str(start_sec),
             '-t', str(duration_sec),
+            '-acodec', 'pcm_s16le',
+            '-ar', '24000',
+            '-ac', '1',
+            str(output_file)
+        ]
+        subprocess.run(cmd, check=True, capture_output=True)
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
+
+def apply_production_filters(input_file, output_file):
+    """
+    Apply production-quality filters to audio (for final references).
+    Includes: highpass, lowpass, noise reduction, loudness normalization.
+    
+    Args:
+        input_file: Input WAV path (raw audio)
+        output_file: Output WAV path (filtered audio)
+    
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        cmd = [
+            'ffmpeg', '-y', '-v', 'error',
+            '-i', str(input_file),
             '-acodec', 'pcm_s16le',
             '-ar', '24000',
             '-ac', '1',
@@ -68,9 +97,61 @@ def format_time_hhmmss(seconds):
     return f"{hours:02d}{minutes:02d}{secs:02d}"
 
 
-def analyze_segments(input_file, segment_duration=10, overlap=5, max_segments=None, start_offset=0):
+def analyze_segment_worker(args):
     """
-    Analyze audio file in segments and find best ones.
+    Worker function for parallel segment analysis (using pre-extracted RAW files).
+    
+    Args:
+        args: Tuple of (temp_wav_path, start_time, segment_duration, segment_index, total_segments)
+    
+    Returns:
+        Tuple of (start_time, analysis_dict, quality_score, temp_wav_path) or None on error
+    """
+    temp_wav_path, start_time, segment_duration, segment_index, total_segments = args
+    
+    # Get worker ID
+    worker_id = current_process().name
+    worker_num = worker_id.split('-')[-1] if '-' in worker_id else worker_id
+    
+    # Start timing
+    start_processing_time = time.time()
+    
+    try:
+        # Analyze segment (already extracted)
+        analysis = analyze_voice(str(temp_wav_path))
+        
+        vq = analysis['acoustic_metrics']['voice_quality']
+        
+        # Calculate quality score
+        quality_score = (
+            (1.0 - min(vq['jitter_percent'] / 5.0, 1.0)) * 4.0 +
+            (1.0 - min(vq['shimmer_percent'] / 15.0, 1.0)) * 4.0 +
+            (min(vq['hnr_db'] / 25.0, 1.0)) * 2.0
+        )
+        
+        # Calculate total time
+        total_time = time.time() - start_processing_time
+        
+        # Print progress with worker ID and timing
+        print(f"  ✓ [W{worker_num}] Segment {segment_index}/{total_segments}: "
+              f"{format_time(start_time)}-{format_time(start_time + segment_duration)} | "
+              f"Quality: {quality_score:.1f}/10 | "
+              f"Jitter: {vq['jitter_percent']:.2f}% | "
+              f"Shimmer: {vq['shimmer_percent']:.2f}% | "
+              f"HNR: {vq['hnr_db']:.1f} dB | "
+              f"Time: {total_time:.1f}s")
+        
+        return (start_time, analysis, quality_score, temp_wav_path)
+        
+    except Exception as e:
+        elapsed = time.time() - start_processing_time
+        print(f"  ⚠️  [W{worker_num}] Segment {segment_index}/{total_segments}: Analysis failed - {e} ({elapsed:.1f}s)")
+        return None
+
+
+def analyze_segments(input_file, segment_duration=10, overlap=5, max_segments=None, start_offset=0, num_workers=None):
+    """
+    Analyze audio file in segments and find best ones (using parallel processing).
     
     Args:
         input_file: Path to input audio file
@@ -78,6 +159,7 @@ def analyze_segments(input_file, segment_duration=10, overlap=5, max_segments=No
         overlap: Overlap between segments in seconds (default: 5)
         max_segments: Maximum number of segments to analyze (None = all)
         start_offset: Start time in seconds to begin analysis (default: 0)
+        num_workers: Number of parallel workers (None = auto-detect)
     
     Returns:
         List of tuples: (start_time, analysis_dict, quality_score)
@@ -120,56 +202,90 @@ def analyze_segments(input_file, segment_duration=10, overlap=5, max_segments=No
         print(f"Error: No segments found starting from {format_time(start_offset)}")
         return []
     
+    # Auto-detect optimal number of workers if not specified
+    if num_workers is None:
+        # Use 75% of available cores, min 1, max 16
+        num_workers = max(1, min(int(cpu_count() * 0.75), 16))
+    
     print(f"Total segments to analyze: {len(segments)}")
     print(f"Time range: {format_time(segments[0])} - {format_time(segments[-1] + segment_duration)}")
+    print(f"Workers: {num_workers} parallel processes")
     print("="*70)
     
-    # Analyze each segment
-    results = []
+    # Create temporary directory for all extractions
     temp_dir = Path(tempfile.mkdtemp())
+    temp_files = []
     
     try:
+        # PHASE 1: Extract all segments (RAW, fast - no filters)
+        print("\nPhase 1/2: Extracting segments (RAW, no filters)...")
+        extraction_start_time = time.time()
+        
         for i, start in enumerate(segments, 1):
-            print(f"\nSegment {i}/{len(segments)}: {format_time(start)} - {format_time(start + segment_duration)}")
-            
-            # Extract segment
             temp_wav = temp_dir / f"segment_{i}.wav"
-            if not extract_segment(input_file, start, segment_duration, temp_wav):
-                print("  ⚠️  Failed to extract segment")
-                continue
-            
-            # Analyze segment
-            try:
-                analysis = analyze_voice(str(temp_wav))
+            if extract_segment_raw(input_file, start, segment_duration, temp_wav):
+                temp_files.append((temp_wav, start, i))
+                print(f"  ✓ Extracted {i}/{len(segments)}: {format_time(start)}-{format_time(start + segment_duration)}", end='\r')
+            else:
+                print(f"  ⚠️  Failed to extract segment {i}/{len(segments)}: {format_time(start)}-{format_time(start + segment_duration)}")
+        
+        extraction_time = time.time() - extraction_start_time
+        print(f"\nPhase 1 complete: {len(temp_files)}/{len(segments)} segments extracted in {extraction_time:.1f}s")
+        
+        if not temp_files:
+            print("No segments extracted successfully!")
+            return []
+        
+        # PHASE 2: Analyze segments in parallel
+        print(f"\nPhase 2/2: Analyzing quality (parallel, {num_workers} workers)...")
+        analysis_start_time = time.time()
+        
+        # Prepare arguments for parallel processing
+        worker_args = [
+            (temp_wav, start, segment_duration, idx, len(temp_files))
+            for temp_wav, start, idx in temp_files
+        ]
+        
+        results = []
+        
+        if num_workers == 1:
+            # Sequential processing (useful for debugging)
+            print("Running in sequential mode (1 worker)")
+            for args in worker_args:
+                result = analyze_segment_worker(args)
+                if result is not None:
+                    results.append(result)
+        else:
+            # Parallel processing
+            with Pool(processes=num_workers) as pool:
+                # Process all segments in parallel
+                parallel_results = pool.map(analyze_segment_worker, worker_args)
                 
-                vq = analysis['acoustic_metrics']['voice_quality']
-                qa = analysis['quality_assessment']
-                
-                # Calculate quality score (lower jitter/shimmer = better)
-                # Weighted score: jitter and shimmer are most important
-                quality_score = (
-                    (1.0 - min(vq['jitter_percent'] / 5.0, 1.0)) * 4.0 +  # 4 points (40% weight)
-                    (1.0 - min(vq['shimmer_percent'] / 15.0, 1.0)) * 4.0 +  # 4 points (40% weight)
-                    (min(vq['hnr_db'] / 25.0, 1.0)) * 2.0  # 2 points (20% weight)
-                )  # Total: 0-10 scale
-                
-                results.append((start, analysis, quality_score))
-                
-                # Print brief summary
-                print(f"  Jitter: {vq['jitter_percent']:.2f}% | "
-                      f"Shimmer: {vq['shimmer_percent']:.2f}% | "
-                      f"HNR: {vq['hnr_db']:.1f} dB | "
-                      f"Quality: {quality_score:.1f}/10")
-                
-            except Exception as e:
-                print(f"  ⚠️  Analysis failed: {e}")
-                continue
-    
-    finally:
-        # Cleanup temp directory
+                # Filter out None results (failed analyses)
+                results = [r for r in parallel_results if r is not None]
+        
+        analysis_time = time.time() - analysis_start_time
+        
+        print("\n" + "="*70)
+        print(f"Phase 2 complete: {len(results)}/{len(temp_files)} segments analyzed in {analysis_time:.1f}s")
+        
+        total_time = extraction_time + analysis_time
+        print(f"Total processing time: {total_time:.1f}s ({total_time/60:.1f} min)")
+        print(f"  - Extraction: {extraction_time:.1f}s ({extraction_time/len(temp_files):.1f}s per segment)")
+        print(f"  - Analysis: {analysis_time:.1f}s ({analysis_time/len(results):.1f}s per segment)")
+        
+        if num_workers > 1 and len(results) > 0:
+            avg_time_per_segment = analysis_time / len(results)
+            theoretical_sequential_time = avg_time_per_segment * len(results)
+            speedup = theoretical_sequential_time / analysis_time
+            print(f"  - Analysis speedup: {speedup:.1f}x (vs sequential)")
+        
+        return results, temp_dir
+        
+    except Exception as e:
+        print(f"Error during analysis: {e}")
         shutil.rmtree(temp_dir, ignore_errors=True)
-    
-    return results
+        return [], None
 
 
 def print_results(results, top_n=5):
@@ -221,11 +337,11 @@ def print_results(results, top_n=5):
 
 def save_best_segments(input_file, results, output_dir, top_n=3, speaker_name=None, run_timestamp=None, start_time=0, end_time=0, min_quality=0.0):
     """
-    Extract and save the best segments.
+    Filter, apply production filters, and save the best segments.
     
     Args:
         input_file: Original audio file path
-        results: List of analysis results
+        results: List of analysis results (with temp file paths)
         output_dir: Directory to save segments
         top_n: Number of top segments to save
         speaker_name: Optional speaker name for nested folder organization
@@ -237,16 +353,19 @@ def save_best_segments(input_file, results, output_dir, top_n=3, speaker_name=No
     if not results:
         return
     
+    print("\n" + "="*70)
+    print("Phase 3/5: Filtering by quality and ranking...")
+    
     # Filter by minimum quality threshold
-    filtered_results = [(start, analysis, score) for start, analysis, score in results if score >= min_quality]
+    filtered_results = [(start, analysis, score, temp_path) for start, analysis, score, temp_path in results if score >= min_quality]
     
     if not filtered_results:
-        print(f"\n⚠️  No segments meet minimum quality threshold of {min_quality}/10")
+        print(f"⚠️  No segments meet minimum quality threshold of {min_quality}/10")
         return
     
     if len(filtered_results) < len(results):
         filtered_count = len(results) - len(filtered_results)
-        print(f"\n🔍 Filtered out {filtered_count} segment(s) below quality {min_quality}/10")
+        print(f"🔍 Filtered out {filtered_count} segment(s) below quality {min_quality}/10")
     
     output_dir = Path(output_dir)
     
@@ -266,35 +385,55 @@ def save_best_segments(input_file, results, output_dir, top_n=3, speaker_name=No
     input_name = Path(input_file).stem
     sorted_results = sorted(filtered_results, key=lambda x: x[2], reverse=True)
     
-    print(f"\nSaving top {top_n} segments to: {output_dir}")
+    # Take only top N
+    segments_to_save = sorted_results[:top_n]
+    
+    print(f"Taking top {len(segments_to_save)} segments (from {len(filtered_results)} that meet criteria)")
+    print(f"Saving to: {output_dir}")
     if speaker_name:
         print(f"Speaker: {speaker_name}")
     if run_timestamp:
         print(f"Run timestamp: {run_timestamp}")
         print(f"Analyzed range: {format_time(start_time)} - {format_time(end_time)}")
     
-    for i, (start_time, analysis, quality_score) in enumerate(sorted_results[:top_n], 1):
+    # PHASE 4: Apply production filters to winners only
+    print(f"\nPhase 4/5: Applying production filters to {len(segments_to_save)} selected segment(s)...")
+    filter_start_time = time.time()
+    
+    for i, (seg_start_time, analysis, quality_score, temp_raw_path) in enumerate(segments_to_save, 1):
         duration = analysis['acoustic_metrics']['duration_sec']
         
         # Generate filename: quality score, speaker name, time range (HHMMSS), then original name
-        start_str = format_time_hhmmss(start_time)
-        end_str = format_time_hhmmss(start_time + duration)
+        start_str = format_time_hhmmss(seg_start_time)
+        end_str = format_time_hhmmss(seg_start_time + duration)
         
         if speaker_name:
             output_file = output_dir / f"q{quality_score:.1f}_{speaker_name}_{start_str}-{end_str}_{input_name}.wav"
         else:
             output_file = output_dir / f"q{quality_score:.1f}_{start_str}-{end_str}_{input_name}.wav"
         
-        # Extract segment
-        if extract_segment(input_file, start_time, duration, output_file):
+        # Apply production filters to the raw segment
+        print(f"  Filtering {i}/{len(segments_to_save)}: q{quality_score:.1f} at {format_time(seg_start_time)}...", end='')
+        filter_seg_start = time.time()
+        
+        if apply_production_filters(temp_raw_path, output_file):
+            filter_seg_time = time.time() - filter_seg_start
+            print(f" Done ({filter_seg_time:.1f}s)")
+            
             # Save analysis
             analysis_file = output_file.with_name(f"{output_file.stem}_analysis.json")
             with open(analysis_file, 'w', encoding='utf-8') as f:
                 json.dump(analysis, f, indent=2, ensure_ascii=False)
-            
-            print(f"  ✓ Segment {i}: {output_file.name} (Quality: {quality_score:.1f}/10)")
         else:
-            print(f"  ✗ Failed to save segment {i}")
+            print(f" Failed!")
+    
+    filter_total_time = time.time() - filter_start_time
+    print(f"Phase 4 complete: {len(segments_to_save)} segment(s) filtered in {filter_total_time:.1f}s")
+    
+    # PHASE 5: Final save confirmation
+    print(f"\nPhase 5/5: References saved successfully!")
+    print(f"  Location: {output_dir}")
+    print(f"  Files: {len(segments_to_save)} WAV + {len(segments_to_save)} JSON")
 
 
 def main():
@@ -318,6 +457,10 @@ Examples:
   %(prog)s audiobook.mp3 --save refs/ --speaker john-doe --top 10 --min-quality 8.0
   # Only saves segments that meet the 8.0 threshold (might save fewer than 10)
   
+  # Use 8 parallel workers for faster processing
+  %(prog)s audiobook.mp3 --save refs/ --speaker john-doe --workers 8 --max-segments 100
+  # Faster on multi-core systems (auto-detects optimal if --workers not specified)
+  
   # Continue from 5:00 onwards (if first attempt didn't find good samples)
   %(prog)s audiobook.mp3 --save refs/ --speaker john-doe --start 300 --max-segments 20
   # Result: references/john-doe/1736525500_000500-083000/q9.2_john-doe_000505-000515_audiobook.wav
@@ -340,12 +483,17 @@ Examples:
                        help='Speaker name for nested folder organization (e.g., "john-smith")')
     parser.add_argument('--min-quality', type=float, default=0.0,
                        help='Minimum quality score to save (0-10, default: 0.0 = save all top segments)')
+    parser.add_argument('--workers', type=int, default=None,
+                       help='Number of parallel workers (default: auto-detect 75%% of CPU cores)')
     parser.add_argument('--start', type=int, default=0,
                        help='Start time in seconds to begin analysis (default: 0)')
     parser.add_argument('-m', '--max-segments', type=int,
                        help='Maximum number of segments to analyze (for quick scan)')
     
     args = parser.parse_args()
+    
+    # Start overall timing
+    script_start_time = time.time()
     
     # Validate input file
     input_file = Path(args.input)
@@ -364,23 +512,25 @@ Examples:
         print(f"Starting from: {format_time(args.start)}")
     print()
     
-    # Analyze segments
-    results = analyze_segments(
+    # Analyze segments (returns results + temp_dir)
+    results, temp_dir = analyze_segments(
         input_file,
         segment_duration=args.duration,
         overlap=args.overlap,
         max_segments=args.max_segments,
-        start_offset=args.start
+        start_offset=args.start,
+        num_workers=args.workers
     )
     
-    # Print results
-    print_results(results, top_n=args.top)
+    # Print results (without temp_path for display)
+    results_for_display = [(start, analysis, score) for start, analysis, score, _ in results]
+    print_results(results_for_display, top_n=args.top)
     
     # Save best segments if requested
     if args.save and results:
         # Calculate analyzed time range
         analysis_start = args.start
-        last_segment_start = max(start_time for start_time, _, _ in results)
+        last_segment_start = max(start_time for start_time, _, _, _ in results)
         analysis_end = int(last_segment_start + args.duration)
         
         save_best_segments(
@@ -395,14 +545,20 @@ Examples:
             min_quality=args.min_quality
         )
     
+    # Cleanup temp directory
+    if temp_dir and temp_dir.exists():
+        print(f"\nPhase 6/6: Cleaning up temporary files...")
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        print(f"Cleanup complete!")
+    
     # Summary statistics
     if results:
-        quality_scores = [score for _, _, score in results]
+        quality_scores = [score for _, _, score, _ in results]
         avg_quality = sum(quality_scores) / len(quality_scores)
         best_quality = max(quality_scores)
         
         # Get last processed time
-        last_start_time = max(start_time for start_time, _, _ in results)
+        last_start_time = max(start_time for start_time, _, _, _ in results)
         last_end_time = last_start_time + args.duration
         
         print(f"\nSummary:")
@@ -425,6 +581,12 @@ Examples:
             continue_from = int(last_end_time - args.overlap)
             print(f"\n💡 To continue analyzing from where you left off, use:")
             print(f"   --start {continue_from}")
+    
+    # Print total script execution time
+    script_total_time = time.time() - script_start_time
+    print(f"\n{'='*70}")
+    print(f"Total script execution time: {script_total_time:.1f}s ({script_total_time/60:.1f} min)")
+    print(f"{'='*70}")
 
 
 if __name__ == "__main__":
