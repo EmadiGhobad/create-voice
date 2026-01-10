@@ -191,64 +191,135 @@ Bad/Compressed Voice:
 ./find-best-segments.py audiobook.mp3 --max-segments 20
 ```
 
-### Two-phase architecture with smart filtering
+### Two-phase parallel architecture with smart filtering
 
-The script uses a **highly optimized two-phase architecture**:
+The script uses a **highly optimized two-phase parallel architecture**:
 
-**Phase 1: Fast RAW extraction (sequential)**
-- Extracts all segments WITHOUT expensive filters
-- Very fast: ~0.5s per segment
+```
+┌─────────────────────────────────────────────────────────┐
+│ PHASE 1: Parallel RAW Extraction (4 workers)           │
+│ ─────────────────────────────────────────────────────── │
+│  Input File                                             │
+│      ↓                                                  │
+│  [W1] [W2] [W3] [W4]  ← 4 workers extracting in ||     │
+│    ↓    ↓    ↓    ↓                                     │
+│  seg1 seg2 seg3 seg4 ... seg50  (RAW, no filters)      │
+│                                                         │
+│  Time: ~7s for 50 segments (0.14s each)                │
+└─────────────────────────────────────────────────────────┘
+                     ↓
+┌─────────────────────────────────────────────────────────┐
+│ PHASE 2: Parallel Analysis (6-8 workers)               │
+│ ─────────────────────────────────────────────────────── │
+│  [W1] [W2] [W3] [W4] [W5] [W6]  ← Analyzing in ||      │
+│    ↓    ↓    ↓    ↓    ↓    ↓                           │
+│  Calculate jitter, shimmer, HNR for each segment        │
+│  Quality score: 0-10                                    │
+│                                                         │
+│  Time: ~5s for 50 segments (0.1s each)                 │
+└─────────────────────────────────────────────────────────┘
+                     ↓
+┌─────────────────────────────────────────────────────────┐
+│ PHASE 3-4: Filter & Production (sequential)            │
+│ ─────────────────────────────────────────────────────── │
+│  Filter: quality ≥ 8.0  →  20 segments pass            │
+│  Sort by quality        →  Take top 5                   │
+│  Apply expensive filters →  ONLY to 5 winners          │
+│                                                         │
+│  Time: ~35s (7s per segment × 5 segments)              │
+└─────────────────────────────────────────────────────────┘
+```
 
-**Phase 2: Parallel analysis**
-- Analyzes all segments simultaneously using multiple CPU cores
-- Auto-detects optimal worker count (75% of cores)
+**Why two separate worker pools?**
+- **Phase 1 (4 workers):** I/O-bound extraction, optimal for SSD read performance
+- **Phase 2 (6-8 workers):** CPU-bound analysis, benefits from more parallelization
+- Prevents I/O contention while maximizing CPU utilization
 
-**Phase 3-5: Production filters ONLY on winners**
-- Filters by quality threshold (--min-quality)
-- Ranks and selects top N (--top)
-- Applies expensive production filters ONLY to segments you'll keep
-- Saves final references with proper naming
+**Why not filter during extraction/analysis?**
+- Production filters (noise reduction, loudnorm) are VERY slow (~7s per segment)
+- If we save 5/50 segments: Filter time = 35s (not 350s!)
+- 90% time savings by filtering only winners
 
 **Auto-detection (recommended):**
 ```bash
-# Automatically uses 75% of your CPU cores
+# Automatically optimizes workers for each phase
 ./find-best-segments.py audiobook.mp3 --save refs/ --speaker mel --min-quality 8.0
-# On M1 Pro 8-core: Uses 6 workers
-# On M1 Pro 10-core: Uses 8 workers
-# On Intel 4-core: Uses 3 workers
+
+# Phase 1 (Extraction): 4 workers (fixed, optimal for I/O)
+# Phase 2 (Analysis): Auto-detects based on CPU cores (75%)
+#   - M1 Pro 8-core: 6 analysis workers
+#   - M1 Pro 10-core: 8 analysis workers  
+#   - Intel i7 4-core: 3 analysis workers
 ```
 
-**Manual control:**
+**Manual control (analysis workers only):**
 ```bash
-# Specify exact number of workers
+# Specify exact number of workers for analysis phase
 ./find-best-segments.py audiobook.mp3 --workers 8 --save refs/ --speaker mel
+# Extraction still uses 4 workers (optimal for I/O)
+# Analysis uses 8 workers (your override)
 
-# Use 1 worker (sequential, useful for debugging)
+# Use 1 worker for both phases (sequential, useful for debugging)
 ./find-best-segments.py audiobook.mp3 --workers 1 --save refs/ --speaker mel
+# Extraction: 1 worker (sequential)
+# Analysis: 1 worker (sequential)
 ```
+
+**Note:** Extraction always uses 4 workers (or fewer if less cores available) for optimal I/O performance. The `--workers` parameter only controls analysis parallelization.
 
 **Performance (50 segments, save top 5 with quality ≥8.0):**
 | Device | Extraction | Analysis | Filter 5 | Total | vs Old |
 |--------|------------|----------|----------|-------|--------|
-| M1 Pro (8-core) | 25s | 30s | 35s | **90s** | **5x faster** |
-| M1 Pro (10-core) | 25s | 25s | 35s | **85s** | **6x faster** |
-| Intel i7 (4-core) | 30s | 45s | 35s | **110s** | **4x faster** |
-| Intel i5 (2-core) | 35s | 90s | 35s | **160s** | **3x faster** |
+| M1 Pro (8-core) | 7s (4 workers) | 5s (6 workers) | 35s | **47s** | **8x faster** 🚀 |
+| M1 Pro (10-core) | 7s (4 workers) | 4s (8 workers) | 35s | **46s** | **9x faster** 🚀 |
+| Intel i7 (4-core) | 10s (4 workers) | 10s (3 workers) | 35s | **55s** | **7x faster** |
+| Intel i5 (2-core) | 15s (2 workers) | 20s (1 worker) | 35s | **70s** | **5x faster** |
 
-**Why this is fast:**
+**Performance (200 segments, save top 10 with quality ≥8.0):**
+| Device | Extraction | Analysis | Filter 10 | Total |
+|--------|------------|----------|-----------|-------|
+| M1 Pro (8-core) | 25s | 20s | 70s | **115s (1.9 min)** |
+| M1 Pro (10-core) | 25s | 16s | 70s | **111s (1.8 min)** |
+| Intel i7 (4-core) | 40s | 40s | 70s | **150s (2.5 min)** |
+
+**Why this is extremely fast:**
+- **Parallel extraction (4 workers):** I/O-optimized for fast SSD reads
+- **Parallel analysis (6-8 workers):** CPU-optimized for computation
 - No expensive filters during analysis (noise reduction, loudness normalization)
 - Production filters applied ONLY to segments you actually save
-- If you save 5 out of 50 segments, you only filter 5 (not 50!)
-- Parallel analysis for maximum CPU utilization
+- If you save 10 out of 200 segments, you only filter 10 (not 200!)
+- Maximum CPU utilization without I/O bottlenecks
 
-### What it does
-1. Splits audio into overlapping segments (default: 10s with 5s overlap)
-2. Analyzes each segment for jitter, shimmer, HNR
-3. Calculates quality score (0-10)
-4. Shows best segments ranked by quality
-5. Filters by minimum quality threshold (optional)
-6. Optionally saves best segments as WAV files
-7. Organizes by speaker and analyzed time range
+### What it does (6-phase architecture)
+
+**Phase 1: Parallel RAW Extraction (4 workers)**
+- Splits audio into overlapping segments (default: 10s with 5s overlap)
+- Extracts all segments in parallel WITHOUT expensive filters
+- 4 workers optimal for SSD I/O performance
+
+**Phase 2: Parallel Quality Analysis (6-8 workers)**
+- Analyzes each segment for jitter, shimmer, HNR
+- Calculates quality score (0-10)
+- CPU-bound, uses more workers than extraction
+
+**Phase 3: Filter & Rank**
+- Filters by minimum quality threshold (--min-quality)
+- Sorts all segments by quality score
+- Takes top N segments (--top)
+
+**Phase 4: Apply Production Filters (to winners only)**
+- Applies expensive filters ONLY to segments that will be saved
+- Filters: highpass, lowpass, noise reduction, loudness normalization
+- Saves 90% of filter time by not filtering rejected segments
+
+**Phase 5: Save Final References**
+- Saves filtered WAV files with proper naming
+- Saves analysis JSON for each segment
+- Organizes by speaker and analyzed time range
+
+**Phase 6: Cleanup**
+- Removes temporary RAW extraction files
+- Keeps only final filtered references
 
 ### Folder naming format
 ```

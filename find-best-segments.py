@@ -75,6 +75,27 @@ def apply_production_filters(input_file, output_file):
         return False
 
 
+def extract_worker(args):
+    """
+    Worker function for parallel extraction.
+    
+    Args:
+        args: Tuple of (input_file, start_time, segment_duration, temp_wav_path, segment_index, total_segments)
+    
+    Returns:
+        Tuple of (temp_wav_path, start_time, segment_index) or None on error
+    """
+    input_file, start_time, segment_duration, temp_wav_path, segment_index, total_segments = args
+    
+    try:
+        if extract_segment_raw(input_file, start_time, segment_duration, temp_wav_path):
+            return (temp_wav_path, start_time, segment_index)
+        else:
+            return None
+    except Exception as e:
+        return None
+
+
 def format_time(seconds):
     """Convert seconds to MM:SS format"""
     mins = int(seconds // 60)
@@ -216,25 +237,46 @@ def analyze_segments(input_file, segment_duration=10, overlap=5, max_segments=No
     temp_dir = Path(tempfile.mkdtemp())
     temp_files = []
     
+    # Determine optimal extraction workers (default: 4, good for I/O-bound extraction)
+    extraction_workers = min(4, cpu_count())
+    
     try:
-        # PHASE 1: Extract all segments (RAW, fast - no filters)
-        print("\nPhase 1/2: Extracting segments (RAW, no filters)...")
+        # PHASE 1: Extract all segments in parallel (RAW, fast - no filters)
+        print(f"\nPhase 1/2: Extracting segments (RAW, no filters) - {extraction_workers} workers...")
         extraction_start_time = time.time()
         
-        for i, start in enumerate(segments, 1):
-            temp_wav = temp_dir / f"segment_{i}.wav"
-            if extract_segment_raw(input_file, start, segment_duration, temp_wav):
-                temp_files.append((temp_wav, start, i))
-                print(f"  ✓ Extracted {i}/{len(segments)}: {format_time(start)}-{format_time(start + segment_duration)}", end='\r')
-            else:
-                print(f"  ⚠️  Failed to extract segment {i}/{len(segments)}: {format_time(start)}-{format_time(start + segment_duration)}")
+        # Prepare extraction arguments
+        extraction_args = [
+            (str(input_file), start, segment_duration, temp_dir / f"segment_{i}.wav", i, len(segments))
+            for i, start in enumerate(segments, 1)
+        ]
+        
+        if extraction_workers == 1:
+            # Sequential extraction
+            for args in extraction_args:
+                result = extract_worker(args)
+                if result:
+                    temp_wav_path, start, idx = result
+                    temp_files.append((temp_wav_path, start, idx))
+                    print(f"  ✓ Extracted {idx}/{len(segments)}: {format_time(start)}-{format_time(start + segment_duration)}", end='\r')
+        else:
+            # Parallel extraction
+            with Pool(processes=extraction_workers) as pool:
+                extraction_results = pool.map(extract_worker, extraction_args)
+                
+                # Filter successful extractions and update progress
+                for result in extraction_results:
+                    if result:
+                        temp_wav_path, start, idx = result
+                        temp_files.append((temp_wav_path, start, idx))
+                        print(f"  ✓ Extracted {idx}/{len(segments)}: {format_time(start)}-{format_time(start + segment_duration)}", end='\r')
         
         extraction_time = time.time() - extraction_start_time
-        print(f"\nPhase 1 complete: {len(temp_files)}/{len(segments)} segments extracted in {extraction_time:.1f}s")
+        print(f"\nPhase 1 complete: {len(temp_files)}/{len(segments)} segments extracted in {extraction_time:.1f}s ({extraction_time/len(temp_files):.2f}s per segment)")
         
         if not temp_files:
             print("No segments extracted successfully!")
-            return []
+            return [], None
         
         # PHASE 2: Analyze segments in parallel
         print(f"\nPhase 2/2: Analyzing quality (parallel, {num_workers} workers)...")
