@@ -80,19 +80,30 @@ def extract_worker(args):
     Worker function for parallel extraction.
     
     Args:
-        args: Tuple of (input_file, start_time, segment_duration, temp_wav_path, segment_index, total_segments)
+        args: Tuple of (input_file, start_time, segment_duration, temp_wav_path, segment_index, total_segments, worker_id)
     
     Returns:
-        Tuple of (temp_wav_path, start_time, segment_index) or None on error
+        Tuple of (temp_wav_path, start_time, segment_index, extraction_time) or None on error
     """
-    input_file, start_time, segment_duration, temp_wav_path, segment_index, total_segments = args
+    input_file, start_time, segment_duration, temp_wav_path, segment_index, total_segments, worker_id = args
+    
+    extract_start = time.time()
     
     try:
+        # Log start
+        start_time_str = format_time(start_time)
+        end_time_str = format_time(start_time + segment_duration)
+        print(f"  [W{worker_id}] Extracting segment {segment_index}/{total_segments}: {start_time_str}-{end_time_str}")
+        
         if extract_segment_raw(input_file, start_time, segment_duration, temp_wav_path):
-            return (temp_wav_path, start_time, segment_index)
+            extraction_time = time.time() - extract_start
+            print(f"  [W{worker_id}] ✓ Extracted segment {segment_index}/{total_segments} in {extraction_time:.2f}s")
+            return (temp_wav_path, start_time, segment_index, extraction_time)
         else:
+            print(f"  [W{worker_id}] ✗ Failed segment {segment_index}/{total_segments}")
             return None
     except Exception as e:
+        print(f"  [W{worker_id}] ✗ Error segment {segment_index}/{total_segments}: {e}")
         return None
 
 
@@ -245,34 +256,38 @@ def analyze_segments(input_file, segment_duration=10, overlap=5, max_segments=No
         print(f"\nPhase 1/2: Extracting segments (RAW, no filters) - {extraction_workers} workers...")
         extraction_start_time = time.time()
         
-        # Prepare extraction arguments
+        # Prepare extraction arguments with worker IDs
         extraction_args = [
-            (str(input_file), start, segment_duration, temp_dir / f"segment_{i}.wav", i, len(segments))
+            (str(input_file), start, segment_duration, temp_dir / f"segment_{i}.wav", i, len(segments), (i % extraction_workers) + 1)
             for i, start in enumerate(segments, 1)
         ]
+        
+        extraction_times = []
         
         if extraction_workers == 1:
             # Sequential extraction
             for args in extraction_args:
                 result = extract_worker(args)
                 if result:
-                    temp_wav_path, start, idx = result
+                    temp_wav_path, start, idx, extr_time = result
                     temp_files.append((temp_wav_path, start, idx))
-                    print(f"  ✓ Extracted {idx}/{len(segments)}: {format_time(start)}-{format_time(start + segment_duration)}", end='\r')
+                    extraction_times.append(extr_time)
         else:
             # Parallel extraction
             with Pool(processes=extraction_workers) as pool:
                 extraction_results = pool.map(extract_worker, extraction_args)
                 
-                # Filter successful extractions and update progress
+                # Filter successful extractions
                 for result in extraction_results:
                     if result:
-                        temp_wav_path, start, idx = result
+                        temp_wav_path, start, idx, extr_time = result
                         temp_files.append((temp_wav_path, start, idx))
-                        print(f"  ✓ Extracted {idx}/{len(segments)}: {format_time(start)}-{format_time(start + segment_duration)}", end='\r')
+                        extraction_times.append(extr_time)
         
         extraction_time = time.time() - extraction_start_time
-        print(f"\nPhase 1 complete: {len(temp_files)}/{len(segments)} segments extracted in {extraction_time:.1f}s ({extraction_time/len(temp_files):.2f}s per segment)")
+        avg_extraction = sum(extraction_times) / len(extraction_times) if extraction_times else 0
+        print(f"\nPhase 1 complete: {len(temp_files)}/{len(segments)} segments extracted")
+        print(f"  Total time: {extraction_time:.1f}s | Avg per segment: {avg_extraction:.2f}s | Speedup: {avg_extraction*len(temp_files)/extraction_time:.1f}x")
         
         if not temp_files:
             print("No segments extracted successfully!")
