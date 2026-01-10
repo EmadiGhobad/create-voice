@@ -1,12 +1,12 @@
 {
-  "batch-id": 1,
+  "batch-id": 15,
   "texts": {
 	"content": "She reveals that her own history cultivated this pervasive need for perfection, watching it consumes chunks of her life under the false promise that the resulting success would justify the losses.",
 	"chunk-policy": "Sentence"
   },
-  "steps": 12,
-  "alpha": 0.2,
-  "beta": 0.65,
+  "steps": 25,
+  "alpha": 0.35,
+  "beta": 0.5,
   "embedding-scale": 1.3,
   "references": {
 	"id": "proper-name",
@@ -23,8 +23,8 @@
 		  "input/speaker/real/Julia Whelan_000105-000115.wav"
 		],
 		"sample-prosody-index": -1,
-		"timbre-weight": 1,
-		"prosody-weight": 0
+		"timbre-weight": 2,
+		"prosody-weight": 1
 	  },
 	  {
 		"name": "she-motivation",
@@ -33,7 +33,7 @@
 		],
 		"sample-prosody-index": -1,
 		"timbre-weight": 1,
-		"prosody-weight": 1
+		"prosody-weight": 2
 	  }
 	]
   },
@@ -41,5 +41,5 @@
   "crossfade-ms": 50,
   "normalize": true,
   "pronunciation-dict": "pronunciation_dict.json",
-  "debug-chunks": false
+  "debug-chunks": true
 }

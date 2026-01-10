@@ -9,6 +9,7 @@ import argparse
 import subprocess
 import tempfile
 import json
+import time
 from pathlib import Path
 from analyze_voice import analyze_voice
 import shutil
@@ -52,7 +53,22 @@ def format_time(seconds):
     return f"{mins:02d}:{secs:02d}"
 
 
-def analyze_segments(input_file, segment_duration=10, overlap=5, max_segments=None):
+def format_time_hhmmss(seconds):
+    """
+    Convert seconds to HHMMSS format for folder names.
+    Examples:
+      0 → 000000 (0h 0m 0s)
+      330 → 000530 (0h 5m 30s)
+      5430 → 013030 (1h 30m 30s)
+      37845 → 103045 (10h 30m 45s)
+    """
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    return f"{hours:02d}{minutes:02d}{secs:02d}"
+
+
+def analyze_segments(input_file, segment_duration=10, overlap=5, max_segments=None, start_offset=0):
     """
     Analyze audio file in segments and find best ones.
     
@@ -61,6 +77,7 @@ def analyze_segments(input_file, segment_duration=10, overlap=5, max_segments=No
         segment_duration: Duration of each segment in seconds (default: 10)
         overlap: Overlap between segments in seconds (default: 5)
         max_segments: Maximum number of segments to analyze (None = all)
+        start_offset: Start time in seconds to begin analysis (default: 0)
     
     Returns:
         List of tuples: (start_time, analysis_dict, quality_score)
@@ -84,12 +101,14 @@ def analyze_segments(input_file, segment_duration=10, overlap=5, max_segments=No
     
     print(f"Audio duration: {format_time(total_duration)}")
     print(f"Analyzing in {segment_duration}s segments with {overlap}s overlap...")
+    if start_offset > 0:
+        print(f"Starting from: {format_time(start_offset)}")
     print()
     
     # Calculate segment positions
     step = segment_duration - overlap
     segments = []
-    start_time = 0
+    start_time = start_offset
     
     while start_time + segment_duration <= total_duration:
         segments.append(start_time)
@@ -97,7 +116,12 @@ def analyze_segments(input_file, segment_duration=10, overlap=5, max_segments=No
         if max_segments and len(segments) >= max_segments:
             break
     
+    if not segments:
+        print(f"Error: No segments found starting from {format_time(start_offset)}")
+        return []
+    
     print(f"Total segments to analyze: {len(segments)}")
+    print(f"Time range: {format_time(segments[0])} - {format_time(segments[-1] + segment_duration)}")
     print("="*70)
     
     # Analyze each segment
@@ -195,7 +219,7 @@ def print_results(results, top_n=5):
     print("\n" + "="*70)
 
 
-def save_best_segments(input_file, results, output_dir, top_n=3, speaker_name=None):
+def save_best_segments(input_file, results, output_dir, top_n=3, speaker_name=None, run_timestamp=None, start_time=0, end_time=0, min_quality=0.0):
     """
     Extract and save the best segments.
     
@@ -205,9 +229,24 @@ def save_best_segments(input_file, results, output_dir, top_n=3, speaker_name=No
         output_dir: Directory to save segments
         top_n: Number of top segments to save
         speaker_name: Optional speaker name for nested folder organization
+        run_timestamp: Unix timestamp for this run's folder
+        start_time: Start time of analyzed range in seconds
+        end_time: End time of analyzed range in seconds
+        min_quality: Minimum quality score threshold (0-10)
     """
     if not results:
         return
+    
+    # Filter by minimum quality threshold
+    filtered_results = [(start, analysis, score) for start, analysis, score in results if score >= min_quality]
+    
+    if not filtered_results:
+        print(f"\n⚠️  No segments meet minimum quality threshold of {min_quality}/10")
+        return
+    
+    if len(filtered_results) < len(results):
+        filtered_count = len(results) - len(filtered_results)
+        print(f"\n🔍 Filtered out {filtered_count} segment(s) below quality {min_quality}/10")
     
     output_dir = Path(output_dir)
     
@@ -215,22 +254,36 @@ def save_best_segments(input_file, results, output_dir, top_n=3, speaker_name=No
     if speaker_name:
         output_dir = output_dir / speaker_name
     
+    # Create timestamp subfolder with time range
+    if run_timestamp:
+        start_hhmmss = format_time_hhmmss(start_time)
+        end_hhmmss = format_time_hhmmss(end_time)
+        folder_name = f"{run_timestamp}_{start_hhmmss}-{end_hhmmss}"
+        output_dir = output_dir / folder_name
+    
     output_dir.mkdir(parents=True, exist_ok=True)
     
     input_name = Path(input_file).stem
-    sorted_results = sorted(results, key=lambda x: x[2], reverse=True)
+    sorted_results = sorted(filtered_results, key=lambda x: x[2], reverse=True)
     
     print(f"\nSaving top {top_n} segments to: {output_dir}")
     if speaker_name:
         print(f"Speaker: {speaker_name}")
+    if run_timestamp:
+        print(f"Run timestamp: {run_timestamp}")
+        print(f"Analyzed range: {format_time(start_time)} - {format_time(end_time)}")
     
     for i, (start_time, analysis, quality_score) in enumerate(sorted_results[:top_n], 1):
         duration = analysis['acoustic_metrics']['duration_sec']
         
-        # Generate filename
-        start_str = format_time(start_time).replace(':', '')
-        end_str = format_time(start_time + duration).replace(':', '')
-        output_file = output_dir / f"{input_name}_best{i}_{start_str}-{end_str}.wav"
+        # Generate filename: quality score, speaker name, time range (HHMMSS), then original name
+        start_str = format_time_hhmmss(start_time)
+        end_str = format_time_hhmmss(start_time + duration)
+        
+        if speaker_name:
+            output_file = output_dir / f"q{quality_score:.1f}_{speaker_name}_{start_str}-{end_str}_{input_name}.wav"
+        else:
+            output_file = output_dir / f"q{quality_score:.1f}_{start_str}-{end_str}_{input_name}.wav"
         
         # Extract segment
         if extract_segment(input_file, start_time, duration, output_file):
@@ -253,16 +306,24 @@ Examples:
   # Analyze entire file, show top 5 segments
   %(prog)s audiobook.mp3
   
-  # Analyze with 15-second segments
-  %(prog)s audiobook.mp3 --duration 15
-  
   # Save top 3 segments to directory with speaker name
   %(prog)s audiobook.mp3 --save references/ --speaker letitia-rinehart --top 3
+  # Result: references/letitia-rinehart/1736525400_000000-033000/q8.5_letitia-rinehart_000025-000035_audiobook.wav
   
-  # Result: references/letitia-rinehart/audiobook_best1_0342-0352.wav
+  # Analyze first 20 segments
+  %(prog)s audiobook.mp3 --save refs/ --speaker john-doe --max-segments 20
+  # Result: refs/john-doe/1736525400_000000-033000/q7.8_john-doe_000120-000130_audiobook.wav
   
-  # Quick scan (first 20 segments only)
-  %(prog)s audiobook.mp3 --max-segments 20
+  # Save only segments with quality ≥ 8.0 (excellent quality only)
+  %(prog)s audiobook.mp3 --save refs/ --speaker john-doe --top 10 --min-quality 8.0
+  # Only saves segments that meet the 8.0 threshold (might save fewer than 10)
+  
+  # Continue from 5:00 onwards (if first attempt didn't find good samples)
+  %(prog)s audiobook.mp3 --save refs/ --speaker john-doe --start 300 --max-segments 20
+  # Result: references/john-doe/1736525500_000500-083000/q9.2_john-doe_000505-000515_audiobook.wav
+  
+  # Quick scan with 15-second segments
+  %(prog)s audiobook.mp3 --duration 15 --max-segments 20
         """
     )
     
@@ -277,6 +338,10 @@ Examples:
                        help='Save best segments to directory')
     parser.add_argument('--speaker', type=str,
                        help='Speaker name for nested folder organization (e.g., "john-smith")')
+    parser.add_argument('--min-quality', type=float, default=0.0,
+                       help='Minimum quality score to save (0-10, default: 0.0 = save all top segments)')
+    parser.add_argument('--start', type=int, default=0,
+                       help='Start time in seconds to begin analysis (default: 0)')
     parser.add_argument('-m', '--max-segments', type=int,
                        help='Maximum number of segments to analyze (for quick scan)')
     
@@ -288,9 +353,15 @@ Examples:
         print(f"Error: Input file not found: {input_file}")
         sys.exit(1)
     
+    # Generate timestamp for this run
+    run_timestamp = int(time.time())
+    
     print(f"Analyzing: {input_file}")
+    print(f"Run timestamp: {run_timestamp}")
     print(f"Segment duration: {args.duration}s")
     print(f"Overlap: {args.overlap}s")
+    if args.start > 0:
+        print(f"Starting from: {format_time(args.start)}")
     print()
     
     # Analyze segments
@@ -298,15 +369,31 @@ Examples:
         input_file,
         segment_duration=args.duration,
         overlap=args.overlap,
-        max_segments=args.max_segments
+        max_segments=args.max_segments,
+        start_offset=args.start
     )
     
     # Print results
     print_results(results, top_n=args.top)
     
     # Save best segments if requested
-    if args.save:
-        save_best_segments(input_file, results, args.save, top_n=args.top, speaker_name=args.speaker)
+    if args.save and results:
+        # Calculate analyzed time range
+        analysis_start = args.start
+        last_segment_start = max(start_time for start_time, _, _ in results)
+        analysis_end = int(last_segment_start + args.duration)
+        
+        save_best_segments(
+            input_file, 
+            results, 
+            args.save, 
+            top_n=args.top, 
+            speaker_name=args.speaker,
+            run_timestamp=run_timestamp,
+            start_time=analysis_start,
+            end_time=analysis_end,
+            min_quality=args.min_quality
+        )
     
     # Summary statistics
     if results:
@@ -314,16 +401,30 @@ Examples:
         avg_quality = sum(quality_scores) / len(quality_scores)
         best_quality = max(quality_scores)
         
+        # Get last processed time
+        last_start_time = max(start_time for start_time, _, _ in results)
+        last_end_time = last_start_time + args.duration
+        
         print(f"\nSummary:")
         print(f"  Total segments analyzed: {len(results)}")
+        print(f"  Time range processed: {format_time(args.start)} - {format_time(last_end_time)}")
         print(f"  Average quality: {avg_quality:.1f}/10")
         print(f"  Best quality: {best_quality:.1f}/10")
         
         excellent_count = sum(1 for score in quality_scores if score >= 8.0)
         good_count = sum(1 for score in quality_scores if 6.5 <= score < 8.0)
+        meets_threshold = sum(1 for score in quality_scores if score >= args.min_quality)
         
         print(f"  Excellent segments (≥8.0): {excellent_count}")
         print(f"  Good segments (6.5-8.0): {good_count}")
+        if args.min_quality > 0:
+            print(f"  Meets threshold (≥{args.min_quality}): {meets_threshold}")
+        
+        # Suggest continuation if max-segments was used
+        if args.max_segments and len(results) == args.max_segments:
+            continue_from = int(last_end_time - args.overlap)
+            print(f"\n💡 To continue analyzing from where you left off, use:")
+            print(f"   --start {continue_from}")
 
 
 if __name__ == "__main__":

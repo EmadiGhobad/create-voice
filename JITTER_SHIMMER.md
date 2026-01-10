@@ -163,18 +163,27 @@ Bad/Compressed Voice:
 # Analyze entire file
 ./find-best-segments.py audiobook.mp3
 
-# Save top 3 segments with speaker name (creates nested folder)
+# Save top 3 segments with speaker name (creates timestamped + range folder)
 ./find-best-segments.py audiobook.mp3 --save references/ --speaker letitia-rinehart --top 3
-# Result: references/letitia-rinehart/audiobook_best1_0342-0352.wav
+# Result: references/letitia-rinehart/1736525400_000000-033000/q8.5_letitia-rinehart_000025-000035_audiobook.wav
+#         Format: qSCORE_speaker_timeHHMMSS-HHMMSS_filename.wav (6 digits for time!)
 
-# Save without speaker name (flat structure)
-./find-best-segments.py audiobook.mp3 --save references/ --top 3
-# Result: references/audiobook_best1_0342-0352.wav
+# Analyze first 20 segments
+./find-best-segments.py audiobook.mp3 --save refs/ --speaker john-doe --max-segments 20
+# Result: refs/john-doe/1736525400_000000-033000/q7.8_john-doe_000120-000130_audiobook.wav
+
+# Continue from 5:00 onwards (if first attempt didn't find good samples)
+./find-best-segments.py audiobook.mp3 --save refs/ --speaker john-doe --start 300 --max-segments 20
+# Result: refs/john-doe/1736525500_000500-083000/q9.2_john-doe_000505-000515_audiobook.wav (new folder)
+
+# Save only excellent quality segments (≥8.0)
+./find-best-segments.py audiobook.mp3 --save refs/ --speaker mel --top 10 --min-quality 8.0
+# Only saves segments that meet the 8.0 threshold (might save fewer than 10 if quality is low)
 
 # Use 15-second segments
-./find-best-segments.py audiobook.mp3 --duration 15
+./find-best-segments.py audiobook.mp3 --duration 15 --overlap 7
 
-# Quick scan (first 20 segments)
+# Quick scan without saving
 ./find-best-segments.py audiobook.mp3 --max-segments 20
 ```
 
@@ -183,7 +192,52 @@ Bad/Compressed Voice:
 2. Analyzes each segment for jitter, shimmer, HNR
 3. Calculates quality score (0-10)
 4. Shows best segments ranked by quality
-5. Optionally saves best segments as WAV files
+5. Filters by minimum quality threshold (optional)
+6. Optionally saves best segments as WAV files
+7. Organizes by speaker and analyzed time range
+
+### Folder naming format
+```
+speaker-name/timestamp_startHHMMSS-endHHMMSS/
+```
+
+**HHMMSS Format Examples:**
+- `000000` = 00:00:00 (0 hours, 0 minutes, 0 seconds)
+- `003300` = 00:33:00 (0 hours, 33 minutes, 0 seconds)
+- `013030` = 01:30:30 (1 hour, 30 minutes, 30 seconds)
+- `104530` = 10:45:30 (10 hours, 45 minutes, 30 seconds)
+- `231545` = 23:15:45 (23 hours, 15 minutes, 45 seconds)
+
+**Example Folders:**
+- `1736525400_000000-033000/` = Analyzed from 00:00:00 to 00:33:00
+- `1736525500_013000-020000/` = Analyzed from 01:30:00 to 02:00:00
+- `1736525600_104530-111500/` = Analyzed from 10:45:30 to 11:15:00
+
+### Filename format (inside folders)
+```
+qSCORE_speaker_startHHMMSS-endHHMMSS_original-filename.wav
+```
+
+**Why this order?**
+1. **Quality score first** → Automatic sorting by quality (best first)
+2. **Speaker name second** → Group by speaker within same quality
+3. **Time range third** → Tertiary sort by time position (HHMMSS = 6 digits)
+4. **Original filename last** → Descriptive but not critical for sorting
+
+**Example Filenames:**
+- `q9.2_john-smith_000505-000515_podcast.wav` → Quality 9.2, speaker john-smith, time 00:05:05-00:05:15
+- `q8.5_mary-jones_000025-000035_audiobook.wav` → Quality 8.5, speaker mary-jones, time 00:00:25-00:00:35
+- `q7.1_tom-brown_012300-012400_interview.wav` → Quality 7.1, speaker tom-brown, time 01:23:00-01:24:00
+
+**Sorting benefits:**
+```bash
+ls -1  # Automatically sorted by quality, then speaker!
+q9.2_john-smith_000505-000515_podcast.wav     ← Best quality
+q8.5_mary-jones_000025-000035_audiobook.wav
+q7.9_john-smith_000625-000635_podcast.wav     ← John's segments grouped
+q7.1_tom-brown_012300-012400_interview.wav
+q6.2_mary-jones_000120-000130_audiobook.wav   ← Mary's segments grouped
+```
 
 ### Quality score calculation
 ```
@@ -195,11 +249,40 @@ Quality Score =
 
 This prioritizes jitter and shimmer as most important!
 
+### Quality threshold filtering
+
+Use `--min-quality` to only save segments meeting a minimum quality score:
+
+**Why use this?**
+- Avoid saving poor quality segments even if they're "top 10"
+- Ensure all saved segments meet StyleTTS2 requirements
+- Automatically filter out low-quality audio
+
+**Examples:**
+```bash
+# Only save excellent segments (≥8.0)
+./find-best-segments.py audio.mp3 --save refs/ --speaker john --top 10 --min-quality 8.0
+# If only 3 segments meet 8.0, saves only those 3 (not all 10)
+
+# Only save good or better segments (≥6.5)
+./find-best-segments.py audio.mp3 --save refs/ --speaker mary --top 20 --min-quality 6.5
+
+# Save all top 10 regardless of quality (default behavior)
+./find-best-segments.py audio.mp3 --save refs/ --speaker tom --top 10
+# or explicitly: --min-quality 0.0
+```
+
+**Recommended thresholds:**
+- `--min-quality 8.0` → Excellent only (StyleTTS2 ideal)
+- `--min-quality 7.0` → Good or better (usable for TTS)
+- `--min-quality 6.5` → Fair or better (acceptable)
+- `--min-quality 0.0` → All segments (default)
+
 ---
 
 ## Practical Examples
 
-### Example 1: Organizing by Speaker
+### Example 1: Organizing by Speaker with Timestamps
 ```bash
 # Download audio from LibriVox
 wget https://example.com/letitia_rinehart_audiobook.mp3
@@ -213,13 +296,44 @@ wget https://example.com/letitia_rinehart_audiobook.mp3
 # Result folder structure:
 # references/
 #   letitia-rinehart/
-#     letitia_rinehart_audiobook_best1_0342-0352.wav
-#     letitia_rinehart_audiobook_best1_0342-0352_analysis.json
-#     letitia_rinehart_audiobook_best2_1215-1225.wav
-#     ...
+#     1736525400_000000-050000/  ← Run 1: analyzed 00:00:00 to 00:50:00
+#       q8.5_letitia-rinehart_000342-000352_audiobook.wav
+#       q8.5_letitia-rinehart_000342-000352_audiobook_analysis.json
+#       q7.9_letitia-rinehart_000121-000131_audiobook.wav
+#       q7.9_letitia-rinehart_000121-000131_audiobook_analysis.json
+#       ...
+# Files sorted by quality, then speaker, then time (HHMMSS) automatically!
 ```
 
-### Example 2: Building a Speaker Library
+### Example 2: Incremental Processing (Long Files)
+```bash
+# Step 1: Analyze first 5 minutes (30 segments)
+./find-best-segments.py long-podcast.mp3 \
+  --save refs/ --speaker john-doe \
+  --max-segments 30
+
+# Output shows: "To continue, use: --start 295"
+
+# Step 2: Quality not good enough? Continue from 4:55
+./find-best-segments.py long-podcast.mp3 \
+  --save refs/ --speaker john-doe \
+  --start 295 --max-segments 30
+
+# Result:
+# refs/
+#   john-doe/
+#     1736525400_000000-050000/  ← First run: 00:00:00 to 00:50:00
+#       q6.2_john-doe_000120-000130_long-podcast.wav
+#       q5.8_john-doe_000215-000225_long-podcast.wav
+#       ...
+#     1736525500_000500-001000/  ← Second run: 00:05:00 to 00:10:00
+#       q8.5_john-doe_000505-000515_long-podcast.wav  ✅ Easy to spot best quality!
+#       q7.9_john-doe_000625-000635_long-podcast.wav
+#       ...
+# Files automatically sort by quality, then speaker!
+```
+
+### Example 3: Building a Speaker Library
 ```bash
 # Process multiple speakers
 ./find-best-segments.py john_narrator.mp3 --save refs/ --speaker john-smith --top 3
@@ -229,18 +343,23 @@ wget https://example.com/letitia_rinehart_audiobook.mp3
 # Result:
 # refs/
 #   john-smith/
-#     john_narrator_best1_0120-0130.wav
-#     john_narrator_best1_0120-0130_analysis.json
-#     ...
+#     1736525400_000000-033000/  ← Analyzed 00:00:00 to 00:33:00
+#       q8.2_john-smith_000120-000130_narrator.wav
+#       q8.2_john-smith_000120-000130_narrator_analysis.json
+#       q7.5_john-smith_000245-000255_narrator.wav
+#       ...
 #   mary-jones/
-#     mary_reader_best1_0315-0325.wav
-#     ...
+#     1736525410_000000-053000/  ← Analyzed 00:00:00 to 00:53:00
+#       q9.1_mary-jones_000315-000325_reader.wav
+#       q8.8_mary-jones_000420-000430_reader.wav
+#       ...
 #   tom-brown/
-#     tom_voice_best1_0542-0552.wav
-#     ...
+#     1736525420_013000-053000/  ← Started at 01:30:00, analyzed to 00:53:00
+#       q7.8_tom-brown_005420-005430_voice.wav
+#       ...
 ```
 
-### Example 3: Quick Quality Check
+### Example 4: Quick Quality Check
 ```bash
 # Quick scan first 10 segments to preview quality
 ./find-best-segments.py audiobook.mp3 --max-segments 10
