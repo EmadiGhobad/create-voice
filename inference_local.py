@@ -673,8 +673,24 @@ def concatenate_audio_chunks(audio_chunks, crossfade_ms=50, sample_rate=24000):
     return result
 
 
-def inference(text, ref_s, alpha=0.3, beta=0.7, diffusion_steps=5, embedding_scale=1, normalize=True, dict_path=None):
-    """Perform text-to-speech inference for a single chunk"""
+def inference(text, ref_s, alpha=0.3, beta=0.7, diffusion_steps=5, embedding_scale=1, normalize=True, dict_path=None, fixed_noise=None):
+    """
+    Perform text-to-speech inference for a single chunk.
+    
+    Args:
+        text: Text to synthesize
+        ref_s: Reference style embedding
+        alpha: Timbre control (0-1)
+        beta: Prosody control (0-1)
+        diffusion_steps: Number of diffusion steps
+        embedding_scale: Embedding scale for style
+        normalize: Whether to normalize text
+        dict_path: Path to pronunciation dictionary
+        fixed_noise: Optional pre-generated noise tensor for consistent voice across chunks
+    
+    Returns:
+        Audio array
+    """
     global model_params
     text = text.strip()
     # Normalize text for better pronunciation (if enabled)
@@ -705,7 +721,14 @@ def inference(text, ref_s, alpha=0.3, beta=0.7, diffusion_steps=5, embedding_sca
         bert_dur = model['bert'](tokens, attention_mask=(~text_mask).int())
         d_en = model['bert_encoder'](bert_dur).transpose(-1, -2)
 
-        s_pred = sampler(noise=torch.randn((1, 256)).unsqueeze(1).to(device),
+        # Use fixed noise if provided (for consistent voice across chunks)
+        # Otherwise generate new random noise (for single-chunk inference)
+        if fixed_noise is not None:
+            noise = fixed_noise
+        else:
+            noise = torch.randn((1, 256)).unsqueeze(1).to(device)
+        
+        s_pred = sampler(noise=noise,
                          embedding=bert_dur,
                          embedding_scale=embedding_scale,
                          features=ref_s,
@@ -846,6 +869,21 @@ def inference_chunked(text, ref_s, max_tokens, alpha=0.3, beta=0.7, diffusion_st
     Returns:
         Concatenated audio array
     """
+    # Set random seed for this synthesis session to ensure ALL random operations
+    # (not just diffusion noise) are consistent across chunks
+    # Use timestamp as seed so each run generates different voice, but chunks within
+    # a run are identical
+    session_seed = int(time.time() * 1000) % (2**31)  # Use milliseconds for uniqueness
+    torch.manual_seed(session_seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(session_seed)
+    
+    # Generate consistent noise for all chunks in this synthesis session
+    # This ensures the same voice is used across all chunks while still allowing
+    # variation between different synthesis runs
+    session_noise = torch.randn((1, 256)).unsqueeze(1).to(device)
+    print(f"Session seed: {session_seed} (for consistent voice across all chunks)")
+    
     # Split into chunks
     if chunk_by_sentences:
         chunks = split_text_into_sentences(text)
@@ -879,7 +917,15 @@ def inference_chunked(text, ref_s, max_tokens, alpha=0.3, beta=0.7, diffusion_st
     for i, chunk in enumerate(chunks):
         chunk_token_count = count_tokens(chunk, normalize=normalize)
         print(f"Processing chunk {i+1}/{len(chunks)} ({chunk_token_count} tokens)...")
-        chunk_audio = inference(chunk, ref_s, alpha, beta, diffusion_steps, embedding_scale, normalize=normalize, dict_path=dict_path)
+        
+        # Reset random seed before each chunk to ensure identical random state
+        # This makes ALL stochastic operations (not just diffusion) consistent
+        torch.manual_seed(session_seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed(session_seed)
+        
+        # Pass session_noise to ensure consistent voice across all chunks
+        chunk_audio = inference(chunk, ref_s, alpha, beta, diffusion_steps, embedding_scale, normalize=normalize, dict_path=dict_path, fixed_noise=session_noise)
         audio_chunks.append(chunk_audio)
         
         # Save debug information if enabled
