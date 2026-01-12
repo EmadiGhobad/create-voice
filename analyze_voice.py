@@ -619,6 +619,45 @@ def assess_quality(naturalness, clarity, expressiveness):
         return "Poor"
 
 
+def calculate_tts_quality_score(naturalness, clarity, expressiveness, jitter, shimmer, hnr):
+    """
+    Calculate TTS quality score (0-10) optimized for generated voice evaluation.
+    Different from reference quality - focuses on perceptual quality for end users.
+    
+    This score is specifically designed for evaluating AI-generated voices, weighing
+    perceptual qualities (naturalness, clarity, expressiveness) heavily, with
+    technical metrics used primarily for artifact detection.
+    
+    Args:
+        naturalness: Naturalness score (0-10)
+        clarity: Clarity score (0-10)
+        expressiveness: Expressiveness score (0-10)
+        jitter: Jitter percentage
+        shimmer: Shimmer percentage
+        hnr: Harmonics-to-noise ratio (dB)
+    
+    Returns:
+        TTS quality score (0-10, rounded to 1 decimal)
+    """
+    # Convert technical metrics to 0-10 scale
+    jitter_quality = (1.0 - min(jitter / 5.0, 1.0)) * 10.0
+    shimmer_quality = (1.0 - min(shimmer / 15.0, 1.0)) * 10.0
+    hnr_quality = min(hnr / 25.0, 1.0) * 10.0
+    technical_quality = (jitter_quality + shimmer_quality + hnr_quality) / 3.0
+    
+    # Weighted composite score for TTS evaluation
+    # Perceptual qualities (90%): naturalness (40%), clarity (30%), expressiveness (20%)
+    # Technical quality (10%): for artifact detection
+    tts_score = (
+        naturalness * 0.40 +        # Most important - does it sound human?
+        clarity * 0.30 +             # Critical - can users understand it?
+        expressiveness * 0.20 +      # Important - is it engaging?
+        technical_quality * 0.10     # Minor - mainly for catching artifacts
+    )
+    
+    return round(tts_score, 1)
+
+
 def generate_warnings(jitter, shimmer, hnr, pitch_std, silence_ratio):
     """
     Generate warnings for potential quality issues.
@@ -735,6 +774,16 @@ def analyze_voice(audio_path, text=None):
     
     overall_quality = assess_quality(naturalness_score, clarity_score, expressiveness_score)
     
+    # Calculate TTS quality score (for evaluating generated voices)
+    tts_quality_score = calculate_tts_quality_score(
+        naturalness_score,
+        clarity_score,
+        expressiveness_score,
+        voice_quality['jitter_percent'],
+        voice_quality['shimmer_percent'],
+        voice_quality['hnr_db']
+    )
+    
     warnings = generate_warnings(
         voice_quality['jitter_percent'],
         voice_quality['shimmer_percent'],
@@ -792,6 +841,7 @@ def analyze_voice(audio_path, text=None):
             'clarity_score': round(clarity_score, 1),
             'expressiveness_score': round(expressiveness_score, 1),
             'overall_quality': overall_quality,
+            'tts_quality_score': tts_quality_score,
             'warnings': warnings
         }
     }
@@ -929,6 +979,7 @@ def main():
         print(f"  Naturalness: {qa['naturalness_score']}/10")
         print(f"  Clarity: {qa['clarity_score']}/10")
         print(f"  Expressiveness: {qa['expressiveness_score']}/10")
+        print(f"  TTS Quality Score: {qa['tts_quality_score']}/10")
         
         if qa['warnings']:
             print(f"\n  Warnings:")

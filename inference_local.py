@@ -7,7 +7,6 @@ import os
 import sys
 import time
 import copy
-import hashlib
 import shutil
 from datetime import datetime
 import torch
@@ -1114,68 +1113,124 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def generate_config_hash(config):
-    """
-    Generate a hash from the config content for use in filenames.
-    Excludes output-path since it's just a save location and shouldn't affect the hash.
-    
-    Args:
-        config: Configuration dictionary
-    
-    Returns:
-        String hash (first 12 characters of SHA256)
-    """
-    # Create a copy and remove output-path to ensure same voice config produces same hash
-    # (output-path is just where to save, not part of voice generation)
-    config_copy = copy.deepcopy(config)
-    if 'output-path' in config_copy:
-        del config_copy['output-path']
-    
-    # Convert to JSON string with sorted keys for consistent hashing
-    config_str = json.dumps(config_copy, sort_keys=True, ensure_ascii=False)
-    hash_obj = hashlib.sha256(config_str.encode('utf-8'))
-    hash_hex = hash_obj.hexdigest()
-    # Use first 12 characters for readability
-    return hash_hex[:12]
 
 
-def generate_output_path(output_dir, batch_id, reference_id, timestamp, config_hash, alpha, beta, steps, embedding_scale):
+def generate_temp_output_path(output_dir, batch_id, reference_id, alpha, beta, steps, embedding_scale):
     """
-    Generate output file path from parameters.
-    Creates nested subfolders: batch-{batch-id}/{reference-id} in the output directory.
-    Uses reference-id prefix, timestamp, and parameter suffix with config hash for filename.
+    Generate temporary output file path (without TTS score, to be renamed after analysis).
+    Creates flat structure in batch folder: batch-{batch-id}/
     
     Args:
         output_dir: Output directory path (string or Path)
         batch_id: Batch ID from config
-        reference_id: Reference ID from config (used for folder and filename prefix)
-        timestamp: Unix timestamp (integer) for unique identification
-        config_hash: Hash of the config (12-character string)
+        reference_id: Reference ID from config
         alpha: Alpha parameter value
         beta: Beta parameter value
         steps: Steps parameter value
         embedding_scale: Embedding scale parameter value
     
     Returns:
-        Path object for output file
+        Path object for temporary output file
     """
     output_dir = Path(output_dir)
     
-    # Create nested subfolders: {output-path}/batch-{batch-id}/{reference-id}
+    # Create batch folder only (flat structure)
     batch_dir = output_dir / f"batch-{batch_id}"
-    reference_dir = batch_dir / reference_id
-    reference_dir.mkdir(parents=True, exist_ok=True)
+    batch_dir.mkdir(parents=True, exist_ok=True)
     
-    # Generate filename: {reference-id}_{timestamp}_a{alpha}b{beta}s{steps}es{embedding-scale}_{hash}.wav
+    # Generate temporary filename (without TTS score): {reference-id}_temp_a{alpha}_b{beta}_s{steps}_es{embedding-scale}.wav
     # Format numbers to remove unnecessary decimals (e.g., 0.2 -> 0.2, 1.0 -> 1)
     alpha_str = f"{alpha:g}"  # :g removes trailing zeros
     beta_str = f"{beta:g}"
     embedding_scale_str = f"{embedding_scale:g}"
     
-    filename = f"{reference_id}_{timestamp}_a{alpha_str}b{beta_str}s{steps}es{embedding_scale_str}_{config_hash}.wav"
-    output_path = reference_dir / filename
+    filename = f"{reference_id}_temp_a{alpha_str}_b{beta_str}_s{steps}_es{embedding_scale_str}.wav"
+    output_path = batch_dir / filename
     
     return output_path
+
+
+def generate_final_output_path(output_dir, batch_id, reference_id, tts_score, alpha, beta, steps, embedding_scale):
+    """
+    Generate final output file path with TTS score.
+    
+    Args:
+        output_dir: Output directory path (string or Path)
+        batch_id: Batch ID from config
+        reference_id: Reference ID from config
+        tts_score: TTS quality score (0-10)
+        alpha: Alpha parameter value
+        beta: Beta parameter value
+        steps: Steps parameter value
+        embedding_scale: Embedding scale parameter value
+    
+    Returns:
+        Path object for final output file
+    """
+    output_dir = Path(output_dir)
+    batch_dir = output_dir / f"batch-{batch_id}"
+    
+    # Generate final filename: {reference-id}_{score}_a{alpha}_b{beta}_s{steps}_es{embedding-scale}.wav
+    alpha_str = f"{alpha:g}"
+    beta_str = f"{beta:g}"
+    embedding_scale_str = f"{embedding_scale:g}"
+    
+    filename = f"{reference_id}_{tts_score}_a{alpha_str}_b{beta_str}_s{steps}_es{embedding_scale_str}.wav"
+    output_path = batch_dir / filename
+    
+    return output_path
+
+
+def check_if_output_exists(output_dir, batch_id, reference_id, alpha, beta, steps, embedding_scale):
+    """
+    Check if output already exists for the given parameters (ignoring TTS score).
+    
+    Args:
+        output_dir: Output directory path
+        batch_id: Batch ID from config
+        reference_id: Reference ID from config
+        alpha: Alpha parameter value
+        beta: Beta parameter value
+        steps: Steps parameter value
+        embedding_scale: Embedding scale parameter value
+    
+    Returns:
+        Tuple of (exists: bool, existing_path: Path or None, tts_score: float or None)
+    """
+    output_dir = Path(output_dir)
+    batch_dir = output_dir / f"batch-{batch_id}"
+    
+    if not batch_dir.exists():
+        return False, None, None
+    
+    # Generate glob pattern to match any TTS score
+    alpha_str = f"{alpha:g}"
+    beta_str = f"{beta:g}"
+    embedding_scale_str = f"{embedding_scale:g}"
+    
+    pattern = f"{reference_id}_*_a{alpha_str}_b{beta_str}_s{steps}_es{embedding_scale_str}.wav"
+    
+    # Search for matching files
+    matching_files = list(batch_dir.glob(pattern))
+    
+    if matching_files:
+        # Return the first match (there should only be one)
+        existing_file = matching_files[0]
+        
+        # Extract TTS score from filename
+        try:
+            # Filename format: {ref-id}_{score}_a{alpha}_...
+            parts = existing_file.stem.split('_')
+            if len(parts) >= 2:
+                tts_score = float(parts[1])
+            else:
+                tts_score = None
+        except (ValueError, IndexError):
+            tts_score = None
+        
+        return True, existing_file, tts_score
+    
+    return False, None, None
 
 
 def save_config_copy(config, output_path):
@@ -1206,69 +1261,6 @@ def save_config_copy(config, output_path):
         print(f"Warning: Could not save config file: {e}")
 
 
-def determine_quality_folder(naturalness_score):
-    """
-    Determine quality folder name based on naturalness score.
-    
-    Args:
-        naturalness_score: Naturalness score (0-10)
-    
-    Returns:
-        Quality folder name string
-    """
-    if naturalness_score >= 8.0:
-        return "1-excellent"
-    elif naturalness_score >= 6.5:
-        return "2-good"
-    elif naturalness_score >= 5.0:
-        return "3-fair"
-    else:
-        return "4-review"
-
-
-def organize_output_by_quality(wav_path, analysis):
-    """
-    Move generated files to quality-based subfolder after analysis.
-    Moves WAV file and debug folder (if exists) and returns new path for saving config/analysis.
-    
-    Args:
-        wav_path: Path to generated WAV file
-        analysis: Analysis dictionary containing quality scores
-    
-    Returns:
-        New Path object for the moved WAV file
-    """
-    wav_path = Path(wav_path)
-    
-    # Determine quality folder
-    naturalness_score = analysis['quality_assessment']['naturalness_score']
-    quality_folder = determine_quality_folder(naturalness_score)
-    
-    # Create quality subfolder in the reference directory
-    # Current structure: {output-path}/batch-{batch-id}/{reference-id}/{filename}.wav
-    # New structure: {output-path}/batch-{batch-id}/{reference-id}/{quality-folder}/{filename}.wav
-    reference_dir = wav_path.parent
-    quality_dir = reference_dir / quality_folder
-    quality_dir.mkdir(parents=True, exist_ok=True)
-    
-    # New path for WAV file
-    new_wav_path = quality_dir / wav_path.name
-    
-    # Move WAV file
-    shutil.move(str(wav_path), str(new_wav_path))
-    
-    # Move debug folder if it exists
-    debug_folder_name = f"{wav_path.stem}_debug"
-    debug_folder_path = reference_dir / debug_folder_name
-    if debug_folder_path.exists() and debug_folder_path.is_dir():
-        new_debug_path = quality_dir / debug_folder_name
-        shutil.move(str(debug_folder_path), str(new_debug_path))
-        print(f"  Organized into: {quality_folder}/ (Naturalness: {naturalness_score}/10)")
-        print(f"  Debug folder moved: {debug_folder_name}/")
-    else:
-        print(f"  Organized into: {quality_folder}/ (Naturalness: {naturalness_score}/10)")
-    
-    return new_wav_path
 
 
 def validate_paths():
@@ -1634,11 +1626,29 @@ def main():
     config = load_config_file(args.config)
     config_path = Path(args.config)
     
-    # Generate timestamp once (used for all files to ensure consistent naming)
-    generation_timestamp = int(time.time())
+    # Extract parameters
+    batch_id = config['batch-id']
+    reference_id = config['references']['id']
+    alpha = config['alpha']
+    beta = config['beta']
+    steps = config['steps']
+    embedding_scale = config['embedding-scale']
     
-    # Calculate config hash once (reused for filename generation)
-    config_hash = generate_config_hash(config)
+    # Check if output already exists (skip if it does)
+    exists, existing_path, existing_tts_score = check_if_output_exists(
+        args.output_path, batch_id, reference_id, alpha, beta, steps, embedding_scale
+    )
+    
+    if exists:
+        print("\n⚠️  Output already exists, skipping synthesis:")
+        print(f"   {existing_path}")
+        print(f"\n   Parameters:")
+        print(f"     Reference ID: {reference_id}")
+        print(f"     Alpha: {alpha}, Beta: {beta}, Steps: {steps}, Embedding Scale: {embedding_scale}")
+        if existing_tts_score is not None:
+            print(f"     Existing TTS Quality Score: {existing_tts_score}/10")
+        print(f"\n   To regenerate, delete existing files first.")
+        return
     
     # Extract text from config
     text = config['texts']['content'].strip()
@@ -1647,8 +1657,7 @@ def main():
         sys.exit(1)
     
     print(f"\nText length: {len(text)} characters")
-    print(f"Config hash: {config_hash}")
-    print(f"Generation timestamp: {generation_timestamp}")
+    print(f"Parameters: ref={reference_id}, a={alpha}, b={beta}, s={steps}, es={embedding_scale}")
     
     # Load pronunciation dictionary (resolve path relative to config file if needed)
     dict_path = config['pronunciation-dict']
@@ -1669,72 +1678,112 @@ def main():
     chunk_policy = config['texts']['chunk-policy']
     chunk_by_sentences = (chunk_policy == 'Sentence')
     
-    # Generate output path first (needed for debug folder location)
-    output_path = generate_output_path(
+    # Generate temporary output path (without TTS score)
+    temp_output_path = generate_temp_output_path(
         args.output_path, 
-        config['batch-id'],
-        config['references']['id'],
-        generation_timestamp,
-        config_hash,
-        config['alpha'],
-        config['beta'],
-        config['steps'],
-        config['embedding-scale']
+        batch_id,
+        reference_id,
+        alpha,
+        beta,
+        steps,
+        embedding_scale
     )
     
-    # Synthesize text (pass output_path for debug folder location)
+    # Synthesize text (pass temp_output_path for debug folder location)
     wav, elapsed = synthesize_text(
         text, ref_s, 
-        alpha=config['alpha'],
-        beta=config['beta'],
-        steps=config['steps'],
-        embedding_scale=config['embedding-scale'],
+        alpha=alpha,
+        beta=beta,
+        steps=steps,
+        embedding_scale=embedding_scale,
         max_tokens=config['max-tokens'],
         crossfade_ms=config['crossfade-ms'],
         normalize=config['normalize'],
         dict_path=dict_path,
         debug_chunks=config['debug-chunks'],
         chunk_by_sentences=chunk_by_sentences,
-        output_path=str(output_path)
+        output_path=str(temp_output_path)
     )
     
-    # Save output
-    save_output(wav, str(output_path), elapsed)
+    # Save output to temporary path
+    save_output(wav, str(temp_output_path), elapsed)
     
-    # Analyze voice and organize by quality
-    final_output_path = output_path  # Default to original path if analysis fails
+    # Analyze voice to get TTS quality score
+    final_output_path = temp_output_path  # Default if analysis fails
     
     if analyze_voice is not None:
         print("\n📊 Analyzing voice characteristics...")
         try:
-            analysis = analyze_voice(str(output_path), text=text)
+            analysis = analyze_voice(str(temp_output_path), text=text)
+            
+            # Get TTS quality score
+            tts_score = analysis['quality_assessment']['tts_quality_score']
             
             # Print brief summary
-            print(f"  Quality: {analysis['quality_assessment']['overall_quality']} "
-                  f"(Naturalness: {analysis['quality_assessment']['naturalness_score']}/10, "
-                  f"Clarity: {analysis['quality_assessment']['clarity_score']}/10)")
+            print(f"  Quality: {analysis['quality_assessment']['overall_quality']}")
+            print(f"  TTS Score: {tts_score}/10 "
+                  f"(N: {analysis['quality_assessment']['naturalness_score']}/10, "
+                  f"C: {analysis['quality_assessment']['clarity_score']}/10, "
+                  f"E: {analysis['quality_assessment']['expressiveness_score']}/10)")
             print(f"  Tags: {analysis['derived_tags']['gender']}, "
                   f"{analysis['derived_tags']['age_category']}, "
                   f"{', '.join(analysis['derived_tags']['tone'][:2])}")
             
-            # Organize files into quality-based subfolder
-            print("\n📁 Organizing by quality...")
-            final_output_path = organize_output_by_quality(output_path, analysis)
+            # Generate final output path with TTS score
+            final_output_path = generate_final_output_path(
+                args.output_path,
+                batch_id,
+                reference_id,
+                tts_score,
+                alpha,
+                beta,
+                steps,
+                embedding_scale
+            )
             
-            # Save analysis in quality folder with naming: {filename}_analysis.json
-            analysis_path = final_output_path.with_name(f"{final_output_path.stem}_analysis.json")
+            # Rename WAV file to include TTS score
+            print(f"\n📁 Organizing files...")
+            shutil.move(str(temp_output_path), str(final_output_path))
+            print(f"  WAV saved: {final_output_path.name}")
+            
+            # Create details folder
+            details_dir = final_output_path.parent / "details"
+            details_dir.mkdir(exist_ok=True)
+            
+            # Save analysis to details folder
+            analysis_filename = f"{final_output_path.stem}_analysis.json"
+            analysis_path = details_dir / analysis_filename
             save_analysis(analysis, str(analysis_path))
+            print(f"  Analysis saved: details/{analysis_filename}")
+            
+            # Move debug folder to details if it exists
+            temp_debug_folder = final_output_path.parent / f"{temp_output_path.stem}_debug"
+            final_debug_folder = details_dir / f"{final_output_path.stem}_debug"
+            if temp_debug_folder.exists():
+                shutil.move(str(temp_debug_folder), str(final_debug_folder))
+                print(f"  Debug folder moved: details/{final_debug_folder.name}/")
+            
+            # Save config to details folder
+            config_filename = f"{final_output_path.stem}_config.json"
+            config_path_output = details_dir / config_filename
+            config_with_output = copy.deepcopy(config)
+            config_with_output['output-path'] = str(final_output_path).replace('\\', '/')
+            
+            with open(config_path_output, 'w', encoding='utf-8') as f:
+                json.dump(config_with_output, f, indent=2, ensure_ascii=False)
+            print(f"  Config saved: details/{config_filename}")
             
         except Exception as e:
             print(f"  Warning: Voice analysis/organization failed: {e}")
-            print(f"  Files remain in: {output_path.parent}")
+            print(f"  Files remain at: {temp_output_path}")
+            # Keep temp path as final
+            final_output_path = temp_output_path
     else:
-        print("\n⚠️  Voice analysis not available - files saved without quality organization")
+        print("\n⚠️  Voice analysis not available - files saved without TTS score")
+        print(f"  Output: {temp_output_path}")
     
-    # Save config copy with updated output-path (add it to config for saving)
-    config_with_output = copy.deepcopy(config)
-    config_with_output['output-path'] = str(final_output_path).replace('\\', '/')
-    save_config_copy(config_with_output, final_output_path)
+    print(f"\n✅ Generation complete!")
+    print(f"   Output: {final_output_path.name}")
 
 
 if __name__ == "__main__":
