@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 from analyze_voice import analyze_voice
 import shutil
-from multiprocessing import Pool, cpu_count, current_process
+from multiprocessing import Pool, cpu_count
 from functools import partial
 
 
@@ -134,16 +134,15 @@ def analyze_segment_worker(args):
     Worker function for parallel segment analysis (using pre-extracted RAW files).
     
     Args:
-        args: Tuple of (temp_wav_path, start_time, segment_duration, segment_index, total_segments)
+        args: Tuple of (temp_wav_path, start_time, segment_duration, segment_index, total_segments, num_workers)
     
     Returns:
         Tuple of (start_time, analysis_dict, quality_score, temp_wav_path) or None on error
     """
-    temp_wav_path, start_time, segment_duration, segment_index, total_segments = args
+    temp_wav_path, start_time, segment_duration, segment_index, total_segments, num_workers = args
     
-    # Get worker ID
-    worker_id = current_process().name
-    worker_num = worker_id.split('-')[-1] if '-' in worker_id else worker_id
+    # Calculate worker ID (1-based, relative to this pool)
+    worker_num = ((segment_index - 1) % num_workers) + 1
     
     # Start timing
     start_processing_time = time.time()
@@ -258,7 +257,7 @@ def analyze_segments(input_file, segment_duration=10, overlap=5, max_segments=No
         
         # Prepare extraction arguments with worker IDs
         extraction_args = [
-            (str(input_file), start, segment_duration, temp_dir / f"segment_{i}.wav", i, len(segments), (i % extraction_workers) + 1)
+            (str(input_file), start, segment_duration, temp_dir / f"segment_{i}.wav", i, len(segments), ((i - 1) % extraction_workers) + 1)
             for i, start in enumerate(segments, 1)
         ]
         
@@ -299,7 +298,7 @@ def analyze_segments(input_file, segment_duration=10, overlap=5, max_segments=No
         
         # Prepare arguments for parallel processing
         worker_args = [
-            (temp_wav, start, segment_duration, idx, len(temp_files))
+            (temp_wav, start, segment_duration, idx, len(temp_files), num_workers)
             for temp_wav, start, idx in temp_files
         ]
         
