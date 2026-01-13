@@ -673,7 +673,7 @@ def concatenate_audio_chunks(audio_chunks, crossfade_ms=50, sample_rate=24000):
     return result
 
 
-def inference(text, ref_s, alpha=0.3, beta=0.7, diffusion_steps=5, embedding_scale=1, normalize=True, dict_path=None, fixed_noise=None):
+def inference(text, ref_s, alpha=0.3, beta=0.7, diffusion_steps=5, embedding_scale=1, normalize=True, dict_path=None, noise=None):
     """
     Perform text-to-speech inference for a single chunk.
     
@@ -686,7 +686,7 @@ def inference(text, ref_s, alpha=0.3, beta=0.7, diffusion_steps=5, embedding_sca
         embedding_scale: Embedding scale for style
         normalize: Whether to normalize text
         dict_path: Path to pronunciation dictionary
-        fixed_noise: Optional pre-generated noise tensor for consistent voice across chunks
+        noise: Pre-generated noise tensor (if None, will generate new one)
     
     Returns:
         Audio array
@@ -721,11 +721,8 @@ def inference(text, ref_s, alpha=0.3, beta=0.7, diffusion_steps=5, embedding_sca
         bert_dur = model['bert'](tokens, attention_mask=(~text_mask).int())
         d_en = model['bert_encoder'](bert_dur).transpose(-1, -2)
 
-        # Use fixed noise if provided (for consistent voice across chunks)
-        # Otherwise generate new random noise (for single-chunk inference)
-        if fixed_noise is not None:
-            noise = fixed_noise
-        else:
+        # Use provided noise or generate new one
+        if noise is None:
             noise = torch.randn((1, 256)).unsqueeze(1).to(device)
         
         s_pred = sampler(noise=noise,
@@ -827,9 +824,69 @@ def save_chunk_debug_info(chunk_index, chunk_text, chunk_audio, token_count, deb
     }
 
 
-def save_chunks_metadata(chunk_metadata, total_chunks, max_tokens, crossfade_ms, debug_dir):
+def generate_tts_seeds(tts_seed, tts_noise, tts_cuda, consistent_across_chunks):
     """
-    Save chunks metadata to JSON file.
+    Generate or use configured seeds for TTS synthesis.
+    
+    Args:
+        tts_seed: Configured seed or None (will auto-generate)
+        tts_noise: Configured noise seed or None (will auto-generate)
+        tts_cuda: Configured CUDA seed or None (will auto-generate)
+        consistent_across_chunks: If True, returns base seeds. If False, generates new seeds.
+    
+    Returns:
+        Tuple of (seed, noise_seed, cuda_seed) - either base values or newly generated
+    """
+    if consistent_across_chunks:
+        # FIXED mode: Use configured or generate base seeds once
+        if tts_seed is not None:
+            # Use configured values
+            return tts_seed, tts_noise, tts_cuda
+        else:
+            # Generate base seeds (only once at start)
+            # Return None to signal first-time generation needed
+            return None, None, None
+    else:
+        # VARIANT mode: Always generate new seeds per chunk
+        return torch.seed(), torch.seed(), torch.seed()
+
+
+def initialize_base_seeds(tts_seed, tts_noise, tts_cuda):
+    """
+    Initialize base seeds at the start of synthesis.
+    
+    Args:
+        tts_seed: Configured seed or None
+        tts_noise: Configured noise seed or None
+        tts_cuda: Configured CUDA seed or None
+    
+    Returns:
+        Tuple of (base_seed, base_noise_seed, base_cuda_seed)
+    """
+    if tts_seed is not None:
+        base_seed = tts_seed
+        base_noise_seed = tts_noise
+        base_cuda_seed = tts_cuda
+        print(f"Using configured seeds:")
+        print(f"  tts-seed: {base_seed}")
+        print(f"  tts-noise: {base_noise_seed}")
+        print(f"  tts-cuda: {base_cuda_seed}")
+    else:
+        # Generate all three seeds using PyTorch's entropy
+        base_seed = torch.seed()
+        base_noise_seed = torch.seed()
+        base_cuda_seed = torch.seed()
+        print(f"Generated seeds (PyTorch entropy):")
+        print(f"  tts-seed: {base_seed}")
+        print(f"  tts-noise: {base_noise_seed}")
+        print(f"  tts-cuda: {base_cuda_seed}")
+    
+    return base_seed, base_noise_seed, base_cuda_seed
+
+
+def save_chunks_metadata(chunk_metadata, total_chunks, max_tokens, crossfade_ms, debug_dir, chunk_seeds, base_seed, chunk_noise_seeds, base_noise_seed, chunk_cuda_seeds, base_cuda_seed, consistent_across_chunks):
+    """
+    Save chunks metadata to JSON file including all seeds.
     
     Args:
         chunk_metadata: List of chunk metadata dictionaries
@@ -837,22 +894,45 @@ def save_chunks_metadata(chunk_metadata, total_chunks, max_tokens, crossfade_ms,
         max_tokens: Maximum tokens per chunk setting
         crossfade_ms: Crossfade duration in milliseconds
         debug_dir: Path to debug output directory
+        chunk_seeds: List of seeds used for each chunk
+        base_seed: Base seed for this session
+        chunk_noise_seeds: List of noise seeds used for each chunk
+        base_noise_seed: Base noise seed for this session
+        chunk_cuda_seeds: List of CUDA seeds used for each chunk
+        base_cuda_seed: Base CUDA seed for this session
+        consistent_across_chunks: Whether same seed was used for all chunks
     """
     metadata_path = debug_dir / "chunks_info.json"
+    
+    # Add all seed information to each chunk
+    chunks_with_seeds = []
+    for i, chunk_meta in enumerate(chunk_metadata):
+        chunk_with_seed = chunk_meta.copy()
+        chunk_with_seed['tts_seed'] = int(chunk_seeds[i])
+        chunk_with_seed['tts_noise'] = int(chunk_noise_seeds[i])
+        chunk_with_seed['tts_cuda'] = int(chunk_cuda_seeds[i])
+        chunks_with_seeds.append(chunk_with_seed)
+    
     with open(metadata_path, 'w', encoding='utf-8') as f:
         json.dump({
+            "tts_seed": int(base_seed),
+            "tts_noise": int(base_noise_seed),
+            "tts_cuda": int(base_cuda_seed),
+            "mode": "fixed" if consistent_across_chunks else "variant",
+            "consistent_across_chunks": consistent_across_chunks,
             "total_chunks": total_chunks,
             "max_tokens_per_chunk": max_tokens,
             "crossfade_ms": crossfade_ms,
-            "chunks": chunk_metadata
+            "chunks": chunks_with_seeds
         }, f, indent=2, ensure_ascii=False)
-    print(f"Saved chunk metadata to {metadata_path}")
+    print(f"Saved chunk metadata with all seeds to {metadata_path}")
 
 
 def inference_chunked(text, ref_s, max_tokens, alpha=0.3, beta=0.7, diffusion_steps=5,
-                      embedding_scale=1, crossfade_ms=50, normalize=True, dict_path=None, debug_chunks=False, chunk_by_sentences=False, output_path=None):
+                      embedding_scale=1, crossfade_ms=50, normalize=True, dict_path=None, debug_chunks=False, chunk_by_sentences=False, output_path=None, tts_seed=None, tts_noise=None, tts_cuda=None, consistent_across_chunks=True):
     """
     Perform text-to-speech inference for long texts by splitting into chunks.
+    Manages PyTorch global seed, diffusion noise seed, and CUDA seed separately.
     
     Args:
         text: Input text to synthesize
@@ -865,24 +945,18 @@ def inference_chunked(text, ref_s, max_tokens, alpha=0.3, beta=0.7, diffusion_st
         crossfade_ms: Crossfade duration in milliseconds (default: 50ms)
         normalize: Whether to normalize text for pronunciation (default: True)
         chunk_by_sentences: If True, split by sentences only (ignores max_tokens). If False, split by token capacity.
+        tts_seed: Optional seed for PyTorch global RNG (None = auto-generate)
+        tts_noise: Optional seed for diffusion noise (None = auto-generate)
+        tts_cuda: Optional seed for CUDA RNG (None = auto-generate)
+        consistent_across_chunks: If True, use same seeds for all chunks. If False, generate new per chunk.
     
     Returns:
-        Concatenated audio array
+        Tuple of (audio, chunk_seeds, base_seed, chunk_noise_seeds, base_noise_seed, chunk_cuda_seeds, base_cuda_seed)
     """
-    # Set random seed for this synthesis session to ensure ALL random operations
-    # (not just diffusion noise) are consistent across chunks
-    # Use timestamp as seed so each run generates different voice, but chunks within
-    # a run are identical
-    session_seed = int(time.time() * 1000) % (2**31)  # Use milliseconds for uniqueness
-    torch.manual_seed(session_seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(session_seed)
+    # Initialize base seeds
+    base_seed, base_noise_seed, base_cuda_seed = initialize_base_seeds(tts_seed, tts_noise, tts_cuda)
     
-    # Generate consistent noise for all chunks in this synthesis session
-    # This ensures the same voice is used across all chunks while still allowing
-    # variation between different synthesis runs
-    session_noise = torch.randn((1, 256)).unsqueeze(1).to(device)
-    print(f"Session seed: {session_seed} (for consistent voice across all chunks)")
+    print(f"Mode: {'Fixed (consistent voice)' if consistent_across_chunks else 'Variant (exploration)'}")
     
     # Split into chunks
     if chunk_by_sentences:
@@ -914,34 +988,66 @@ def inference_chunked(text, ref_s, max_tokens, alpha=0.3, beta=0.7, diffusion_st
         debug_dir.mkdir(parents=True, exist_ok=True)
         print(f"Debug mode enabled: Saving chunks to {debug_dir}")
     
+    # Store all seeds for each chunk (for debug output)
+    chunk_seeds = []
+    chunk_noise_seeds = []
+    chunk_cuda_seeds = []
+    
     for i, chunk in enumerate(chunks):
         chunk_token_count = count_tokens(chunk, normalize=normalize)
         print(f"Processing chunk {i+1}/{len(chunks)} ({chunk_token_count} tokens)...")
         
-        # Reset random seed before each chunk to ensure identical random state
-        # This makes ALL stochastic operations (not just diffusion) consistent
-        torch.manual_seed(session_seed)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed(session_seed)
+        # Generate or use base seeds for this chunk
+        if consistent_across_chunks:
+            # FIXED: Use same seeds for all chunks (reproducible)
+            chunk_seed = base_seed
+            chunk_noise_seed = base_noise_seed
+            chunk_cuda_seed = base_cuda_seed
+        else:
+            # VARIANT: Generate new seeds for each chunk (exploration)
+            chunk_seed = torch.seed()
+            chunk_noise_seed = torch.seed()
+            chunk_cuda_seed = torch.seed()
         
-        # Pass session_noise to ensure consistent voice across all chunks
-        chunk_audio = inference(chunk, ref_s, alpha, beta, diffusion_steps, embedding_scale, normalize=normalize, dict_path=dict_path, fixed_noise=session_noise)
+        # Set PyTorch global seed
+        torch.manual_seed(chunk_seed)
+        
+        # Set CUDA seed separately
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed(chunk_cuda_seed)
+        
+        # Generate noise tensor from noise seed
+        torch.manual_seed(chunk_noise_seed)
+        noise = torch.randn((1, 256)).unsqueeze(1).to(device)
+        
+        # Reset to chunk seed for other operations
+        torch.manual_seed(chunk_seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed(chunk_cuda_seed)
+        
+        # Call inference with pre-generated noise
+        chunk_audio = inference(chunk, ref_s, alpha, beta, diffusion_steps, embedding_scale, normalize=normalize, dict_path=dict_path, noise=noise)
         audio_chunks.append(chunk_audio)
+        chunk_seeds.append(chunk_seed)
+        chunk_noise_seeds.append(chunk_noise_seed)
+        chunk_cuda_seeds.append(chunk_cuda_seed)
         
         # Save debug information if enabled
         if debug_chunks and debug_dir:
             metadata = save_chunk_debug_info(i, chunk, chunk_audio, chunk_token_count, debug_dir)
             chunk_metadata.append(metadata)
     
-    # Save metadata JSON if debug mode
+    # Save metadata JSON if debug mode (include all seeds)
     if debug_chunks and debug_dir and chunk_metadata:
-        save_chunks_metadata(chunk_metadata, len(chunks), max_tokens, crossfade_ms, debug_dir)
+        save_chunks_metadata(chunk_metadata, len(chunks), max_tokens, crossfade_ms, debug_dir, 
+                           chunk_seeds, base_seed, chunk_noise_seeds, base_noise_seed, 
+                           chunk_cuda_seeds, base_cuda_seed, consistent_across_chunks)
     
     # Concatenate with crossfading
     print("Concatenating audio chunks...")
     final_audio = concatenate_audio_chunks(audio_chunks, crossfade_ms, sample_rate=24000)
     
-    return final_audio
+    return final_audio, chunk_seeds, base_seed, chunk_noise_seeds, base_noise_seed, chunk_cuda_seeds, base_cuda_seed
 
 
 def load_config_file(config_path):
@@ -1145,6 +1251,49 @@ def validate_config(config, config_path):
             print(f"Error: 'pronunciation-dict' cannot be an empty string. Use null to use default dictionary.")
             sys.exit(1)
     
+    # Validate tts-seed (optional integer or null)
+    tts_seed = config.get('tts-seed')
+    if tts_seed is not None:
+        if not isinstance(tts_seed, int):
+            print(f"Error: 'tts-seed' must be an integer or null")
+            sys.exit(1)
+        if tts_seed < 0 or tts_seed >= 2**63:
+            print(f"Error: 'tts-seed' must be between 0 and {2**63-1}")
+            sys.exit(1)
+    
+    # Validate tts-noise (optional integer or null)
+    tts_noise = config.get('tts-noise')
+    if tts_noise is not None:
+        if not isinstance(tts_noise, int):
+            print(f"Error: 'tts-noise' must be an integer or null")
+            sys.exit(1)
+        if tts_noise < 0 or tts_noise >= 2**63:
+            print(f"Error: 'tts-noise' must be between 0 and {2**63-1}")
+            sys.exit(1)
+    
+    # Validate tts-cuda (optional integer or null)
+    tts_cuda = config.get('tts-cuda')
+    if tts_cuda is not None:
+        if not isinstance(tts_cuda, int):
+            print(f"Error: 'tts-cuda' must be an integer or null")
+            sys.exit(1)
+        if tts_cuda < 0 or tts_cuda >= 2**63:
+            print(f"Error: 'tts-cuda' must be between 0 and {2**63-1}")
+            sys.exit(1)
+    
+    # Validate that tts-seed, tts-noise, and tts-cuda are all null or all set
+    seed_states = [tts_seed is None, tts_noise is None, tts_cuda is None]
+    if not all(seed_states) and not all(not s for s in seed_states):
+        print(f"Error: 'tts-seed', 'tts-noise', and 'tts-cuda' must be all null or all set")
+        print(f"  Current: tts-seed={tts_seed}, tts-noise={tts_noise}, tts-cuda={tts_cuda}")
+        sys.exit(1)
+    
+    # Validate consistent-across-chunks (optional boolean, defaults to true)
+    consistent_across_chunks = config.get('consistent-across-chunks', True)
+    if not isinstance(consistent_across_chunks, bool):
+        print(f"Error: 'consistent-across-chunks' must be a boolean (true/false)")
+        sys.exit(1)
+    
     print(f"✓ Config file validated: {config_path}")
 
 
@@ -1163,7 +1312,7 @@ def parse_arguments():
 
 def generate_temp_output_path(output_dir, batch_id, reference_id, alpha, beta, steps, embedding_scale):
     """
-    Generate temporary output file path (without TTS score, to be renamed after analysis).
+    Generate temporary output file path (without TTS score and seed, to be renamed after analysis).
     Creates flat structure in batch folder: batch-{batch-id}/
     
     Args:
@@ -1184,7 +1333,7 @@ def generate_temp_output_path(output_dir, batch_id, reference_id, alpha, beta, s
     batch_dir = output_dir / f"batch-{batch_id}"
     batch_dir.mkdir(parents=True, exist_ok=True)
     
-    # Generate temporary filename (without TTS score): {reference-id}_temp_a{alpha}_b{beta}_s{steps}_es{embedding-scale}.wav
+    # Generate temporary filename (without TTS score and seed): {reference-id}_temp_a{alpha}_b{beta}_s{steps}_es{embedding-scale}.wav
     # Format numbers to remove unnecessary decimals (e.g., 0.2 -> 0.2, 1.0 -> 1)
     alpha_str = f"{alpha:g}"  # :g removes trailing zeros
     beta_str = f"{beta:g}"
@@ -1198,7 +1347,7 @@ def generate_temp_output_path(output_dir, batch_id, reference_id, alpha, beta, s
 
 def generate_final_output_path(output_dir, batch_id, reference_id, tts_score, alpha, beta, steps, embedding_scale):
     """
-    Generate final output file path with TTS score.
+    Generate final output file path with TTS score (seeds stored in config only).
     
     Args:
         output_dir: Output directory path (string or Path)
@@ -1230,6 +1379,7 @@ def generate_final_output_path(output_dir, batch_id, reference_id, tts_score, al
 def check_if_output_exists(output_dir, batch_id, reference_id, alpha, beta, steps, embedding_scale):
     """
     Check if output already exists for the given parameters (ignoring TTS score).
+    Seeds are not in filename, so we only check parameters.
     
     Args:
         output_dir: Output directory path
@@ -1265,12 +1415,12 @@ def check_if_output_exists(output_dir, batch_id, reference_id, alpha, beta, step
         
         # Extract TTS score from filename
         try:
-            # Filename format: {ref-id}_{score}_a{alpha}_...
-            parts = existing_file.stem.split('_')
-            if len(parts) >= 2:
-                tts_score = float(parts[1])
-            else:
-                tts_score = None
+            # Filename format: {ref-id}_{score}_a{alpha}_b{beta}_s{steps}_es{embedding-scale}.wav
+            stem = existing_file.stem
+            parts = stem.split('_')
+            
+            # Extract TTS score (second part)
+            tts_score = float(parts[1]) if len(parts) >= 2 else None
         except (ValueError, IndexError):
             tts_score = None
         
@@ -1597,7 +1747,7 @@ def compute_style_embedding(speaker_path, emotion_path=None, emotion_blend=0.7):
     return ref_s
 
 
-def synthesize_text(text, ref_s, alpha, beta, steps, embedding_scale, max_tokens, crossfade_ms, normalize=True, dict_path=None, debug_chunks=False, chunk_by_sentences=False, output_path=None):
+def synthesize_text(text, ref_s, alpha, beta, steps, embedding_scale, max_tokens, crossfade_ms, normalize=True, dict_path=None, debug_chunks=False, chunk_by_sentences=False, output_path=None, tts_seed=None, tts_noise=None, tts_cuda=None, consistent_across_chunks=True):
     """
     Synthesize text to speech, handling chunking for long texts.
     
@@ -1613,9 +1763,13 @@ def synthesize_text(text, ref_s, alpha, beta, steps, embedding_scale, max_tokens
         normalize: Whether to normalize text for pronunciation (default: True)
         chunk_by_sentences: If True, split by sentences only. If False, split by token capacity.
         output_path: Optional output file path (used for debug folder location)
+        tts_seed: Optional seed for PyTorch global RNG
+        tts_noise: Optional seed for diffusion noise
+        tts_cuda: Optional seed for CUDA RNG
+        consistent_across_chunks: If True, use same seeds for all chunks
     
     Returns:
-        Audio array and processing time
+        Tuple of (audio, time, chunk_seeds, base_seed, chunk_noise_seeds, base_noise_seed, chunk_cuda_seeds, base_cuda_seed)
     """
     print(f"\nSynthesizing text...")
     print(f"Using settings: alpha={alpha}, beta={beta}, diffusion_steps={steps}")
@@ -1625,15 +1779,17 @@ def synthesize_text(text, ref_s, alpha, beta, steps, embedding_scale, max_tokens
         print("Note: Chunking mode: sentence-by-sentence (ignoring token capacity)")
 
     start_time = time.time()
-    wav = inference_chunked(
+    wav, chunk_seeds, base_seed, chunk_noise_seeds, base_noise_seed, chunk_cuda_seeds, base_cuda_seed = inference_chunked(
         text, ref_s, max_tokens, alpha=alpha, beta=beta,
         diffusion_steps=steps, embedding_scale=embedding_scale,
         crossfade_ms=crossfade_ms, normalize=normalize, dict_path=dict_path, debug_chunks=debug_chunks,
-        chunk_by_sentences=chunk_by_sentences, output_path=output_path
+        chunk_by_sentences=chunk_by_sentences, output_path=output_path,
+        tts_seed=tts_seed, tts_noise=tts_noise, tts_cuda=tts_cuda,
+        consistent_across_chunks=consistent_across_chunks
     )
     elapsed = time.time() - start_time
 
-    return wav, elapsed
+    return wav, elapsed, chunk_seeds, base_seed, chunk_noise_seeds, base_noise_seed, chunk_cuda_seeds, base_cuda_seed
 
 
 def save_output(wav, output_path, elapsed_time):
@@ -1680,6 +1836,12 @@ def main():
     steps = config['steps']
     embedding_scale = config['embedding-scale']
     
+    # Get TTS configuration
+    tts_seed = config.get('tts-seed')
+    tts_noise = config.get('tts-noise')
+    tts_cuda = config.get('tts-cuda')
+    consistent_across_chunks = config.get('consistent-across-chunks', True)
+    
     # Check if output already exists (skip if it does)
     exists, existing_path, existing_tts_score = check_if_output_exists(
         args.output_path, batch_id, reference_id, alpha, beta, steps, embedding_scale
@@ -1694,6 +1856,7 @@ def main():
         if existing_tts_score is not None:
             print(f"     Existing TTS Quality Score: {existing_tts_score}/10")
         print(f"\n   To regenerate, delete existing files first.")
+        print(f"   (Seeds are stored in config file)")
         return
     
     # Extract text from config
@@ -1736,7 +1899,7 @@ def main():
     )
     
     # Synthesize text (pass temp_output_path for debug folder location)
-    wav, elapsed = synthesize_text(
+    wav, elapsed, chunk_seeds, base_seed, chunk_noise_seeds, base_noise_seed, chunk_cuda_seeds, base_cuda_seed = synthesize_text(
         text, ref_s, 
         alpha=alpha,
         beta=beta,
@@ -1748,11 +1911,23 @@ def main():
         dict_path=dict_path,
         debug_chunks=config['debug-chunks'],
         chunk_by_sentences=chunk_by_sentences,
-        output_path=str(temp_output_path)
+        output_path=str(temp_output_path),
+        tts_seed=tts_seed,
+        tts_noise=tts_noise,
+        tts_cuda=tts_cuda,
+        consistent_across_chunks=consistent_across_chunks
     )
     
     # Save output to temporary path
     save_output(wav, str(temp_output_path), elapsed)
+    
+    print(f"\nTTS Configuration:")
+    print(f"  tts-seed: {base_seed}")
+    print(f"  tts-noise: {base_noise_seed}")
+    print(f"  tts-cuda: {base_cuda_seed}")
+    print(f"  Mode: {'Fixed (consistent)' if consistent_across_chunks else 'Variant (exploration)'}")
+    if not consistent_across_chunks and len(chunk_seeds) > 1:
+        print(f"  {len(chunk_seeds)} different seed sets used per chunk (see debug output)")
     
     # Analyze voice to get TTS quality score
     final_output_path = temp_output_path  # Default if analysis fails
@@ -1775,7 +1950,7 @@ def main():
                   f"{analysis['derived_tags']['age_category']}, "
                   f"{', '.join(analysis['derived_tags']['tone'][:2])}")
             
-            # Generate final output path with TTS score
+            # Generate final output path with TTS score (seeds in config only)
             final_output_path = generate_final_output_path(
                 args.output_path,
                 batch_id,
@@ -1809,11 +1984,15 @@ def main():
                 shutil.move(str(temp_debug_folder), str(final_debug_folder))
                 print(f"  Debug folder moved: details/{final_debug_folder.name}/")
             
-            # Save config to details folder
+            # Save config to details folder (with all seeds)
             config_filename = f"{final_output_path.stem}_config.json"
             config_path_output = details_dir / config_filename
             config_with_output = copy.deepcopy(config)
             config_with_output['output-path'] = str(final_output_path).replace('\\', '/')
+            config_with_output['tts-seed'] = int(base_seed)
+            config_with_output['tts-noise'] = int(base_noise_seed)
+            config_with_output['tts-cuda'] = int(base_cuda_seed)
+            config_with_output['consistent-across-chunks'] = consistent_across_chunks
             
             with open(config_path_output, 'w', encoding='utf-8') as f:
                 json.dump(config_with_output, f, indent=2, ensure_ascii=False)

@@ -178,6 +178,49 @@ def load_batch_config(config_path):
         print(f"Error: 'debug-chunks' must be a boolean (true/false)")
         sys.exit(1)
     
+    # Validate optional tts-seed parameter (integer or null)
+    tts_seed = config.get('tts-seed')
+    if tts_seed is not None:
+        if not isinstance(tts_seed, int):
+            print(f"Error: 'tts-seed' must be an integer or null")
+            sys.exit(1)
+        if tts_seed < 0 or tts_seed >= 2**63:
+            print(f"Error: 'tts-seed' must be between 0 and {2**63-1}")
+            sys.exit(1)
+    
+    # Validate optional tts-noise parameter (integer or null)
+    tts_noise = config.get('tts-noise')
+    if tts_noise is not None:
+        if not isinstance(tts_noise, int):
+            print(f"Error: 'tts-noise' must be an integer or null")
+            sys.exit(1)
+        if tts_noise < 0 or tts_noise >= 2**63:
+            print(f"Error: 'tts-noise' must be between 0 and {2**63-1}")
+            sys.exit(1)
+    
+    # Validate optional tts-cuda parameter (integer or null)
+    tts_cuda = config.get('tts-cuda')
+    if tts_cuda is not None:
+        if not isinstance(tts_cuda, int):
+            print(f"Error: 'tts-cuda' must be an integer or null")
+            sys.exit(1)
+        if tts_cuda < 0 or tts_cuda >= 2**63:
+            print(f"Error: 'tts-cuda' must be between 0 and {2**63-1}")
+            sys.exit(1)
+    
+    # Validate that tts-seed, tts-noise, and tts-cuda are all null or all set
+    seed_states = [tts_seed is None, tts_noise is None, tts_cuda is None]
+    if not all(seed_states) and not all(not s for s in seed_states):
+        print(f"Error: 'tts-seed', 'tts-noise', and 'tts-cuda' must be all null or all set")
+        print(f"  Current: tts-seed={tts_seed}, tts-noise={tts_noise}, tts-cuda={tts_cuda}")
+        sys.exit(1)
+    
+    # Validate optional consistent-across-chunks parameter (boolean, defaults to true)
+    consistent_across_chunks = config.get('consistent-across-chunks', True)
+    if not isinstance(consistent_across_chunks, bool):
+        print(f"Error: 'consistent-across-chunks' must be a boolean (true/false)")
+        sys.exit(1)
+    
     print(f"✓ Batch config file validated: {config_path}")
     return config
 
@@ -235,6 +278,19 @@ def create_single_config(batch_config, alpha, beta, steps, embedding_scale, refe
         'pronunciation-dict': batch_config['pronunciation-dict'],
         'debug-chunks': batch_config['debug-chunks']
     }
+    
+    # Pass through optional TTS parameters
+    if 'tts-seed' in batch_config:
+        single_config['tts-seed'] = batch_config['tts-seed']
+    
+    if 'tts-noise' in batch_config:
+        single_config['tts-noise'] = batch_config['tts-noise']
+    
+    if 'tts-cuda' in batch_config:
+        single_config['tts-cuda'] = batch_config['tts-cuda']
+    
+    if 'consistent-across-chunks' in batch_config:
+        single_config['consistent-across-chunks'] = batch_config['consistent-across-chunks']
     
     return single_config
 
