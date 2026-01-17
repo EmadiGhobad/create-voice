@@ -12,6 +12,8 @@ import tempfile
 from pathlib import Path
 from itertools import product
 import argparse
+from multiprocessing import Pool, cpu_count
+import time
 
 
 def parse_arguments():
@@ -30,6 +32,12 @@ def parse_arguments():
         type=str, 
         required=True,
         help='Output directory path for generated audio files (required)'
+    )
+    parser.add_argument(
+        '--workers',
+        type=int,
+        default=None,
+        help='Number of parallel workers (default: auto-detect 75%% of CPU cores)'
     )
     
     return parser.parse_args()
@@ -305,10 +313,7 @@ def run_inference(config_dict, output_path, script_path=None):
         script_path: Path to inference_local.py (defaults to same directory)
     
     Returns:
-        subprocess.CompletedProcess result
-    
-    Raises:
-        SystemExit: If inference fails
+        subprocess.CompletedProcess result or None on error
     """
     if script_path is None:
         script_path = Path(__file__).parent / "inference_local.py"
@@ -316,8 +321,7 @@ def run_inference(config_dict, output_path, script_path=None):
         script_path = Path(script_path)
     
     if not script_path.exists():
-        print(f"Error: inference_local.py not found at {script_path}")
-        sys.exit(1)
+        return None
     
     # Create temporary config file
     with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as tmp_file:
@@ -329,16 +333,12 @@ def run_inference(config_dict, output_path, script_path=None):
         result = subprocess.run(
             [sys.executable, str(script_path), '--config', tmp_config_path, '--output-path', output_path],
             check=True,  # Raise exception on non-zero exit
-            capture_output=False,  # Show output in real-time
+            capture_output=True,  # Capture output for parallel processing
             text=True
         )
         return result
     except subprocess.CalledProcessError as e:
-        print(f"\n❌ Error running inference for combination:")
-        print(f"  Alpha: {config_dict['alpha']}, Beta: {config_dict['beta']}, Steps: {config_dict['steps']}, Embedding Scale: {config_dict['embedding-scale']}")
-        print(f"  Reference ID: {config_dict['references']['id']}")
-        print(f"  Exit code: {e.returncode}")
-        raise
+        return None
     finally:
         # Clean up temporary config file
         try:
@@ -347,8 +347,47 @@ def run_inference(config_dict, output_path, script_path=None):
             pass  # File may already be deleted
 
 
+def inference_worker(args):
+    """
+    Worker function for parallel inference processing.
+    
+    Args:
+        args: Tuple of (combination_index, total_combinations, config_dict, output_path, worker_id)
+    
+    Returns:
+        Tuple of (success: bool, combination_index, error_msg or None, processing_time)
+    """
+    combination_index, total_combinations, config_dict, output_path, worker_id = args
+    
+    start_time = time.time()
+    
+    alpha = config_dict['alpha']
+    beta = config_dict['beta']
+    steps = config_dict['steps']
+    embedding_scale = config_dict['embedding-scale']
+    ref_id = config_dict['references']['id']
+    
+    print(f"  [W{worker_id}] Starting {combination_index}/{total_combinations}: "
+          f"ref={ref_id}, α={alpha}, β={beta}, s={steps}, es={embedding_scale}")
+    
+    result = run_inference(config_dict, output_path)
+    
+    processing_time = time.time() - start_time
+    
+    if result is not None:
+        print(f"  [W{worker_id}] ✓ Completed {combination_index}/{total_combinations} in {processing_time:.1f}s")
+        return (True, combination_index, None, processing_time)
+    else:
+        error_msg = f"ref={ref_id}, α={alpha}, β={beta}, s={steps}, es={embedding_scale}"
+        print(f"  [W{worker_id}] ✗ Failed {combination_index}/{total_combinations}: {error_msg}")
+        return (False, combination_index, error_msg, processing_time)
+
+
 def main():
     """Main function to run batch inference"""
+    # Start timing
+    script_start_time = time.time()
+    
     # Parse arguments
     args = parse_arguments()
     
@@ -361,6 +400,13 @@ def main():
     combinations = generate_combinations(batch_config)
     total_combinations = len(combinations)
     
+    # Auto-detect optimal number of workers if not specified
+    if args.workers is None:
+        # Use 75% of available cores, min 1, max 16
+        num_workers = max(1, min(int(cpu_count() * 0.75), 16))
+    else:
+        num_workers = max(1, args.workers)
+    
     print(f"\n📊 Batch Inference Summary:")
     print(f"  Alpha values: {len(batch_config['alpha'])} ({batch_config['alpha']})")
     print(f"  Beta values: {len(batch_config['beta'])} ({batch_config['beta']})")
@@ -368,40 +414,70 @@ def main():
     print(f"  Embedding scale values: {len(batch_config['embedding-scale'])} ({batch_config['embedding-scale']})")
     print(f"  References: {len(batch_config['references'])}")
     print(f"  Total combinations: {total_combinations}")
+    print(f"  Workers: {num_workers} parallel processes")
     print(f"  Output directory: {args.output_path}")
     
-    # Process each combination
+    # Process combinations in parallel
     print(f"\n🚀 Starting batch inference...\n")
+    print("="*80)
     
+    # Prepare worker arguments
+    worker_args = []
     for i, (alpha, beta, steps, embedding_scale, reference) in enumerate(combinations, 1):
-        print(f"\n{'='*80}")
-        print(f"Processing combination {i}/{total_combinations}")
-        print(f"{'='*80}")
-        print(f"  Alpha: {alpha}")
-        print(f"  Beta: {beta}")
-        print(f"  Steps: {steps}")
-        print(f"  Embedding Scale: {embedding_scale}")
-        print(f"  Reference ID: {reference['id']}")
-        print(f"{'='*80}\n")
-        
-        # Create single-value config for this combination
         single_config = create_single_config(
             batch_config, alpha, beta, steps, embedding_scale, reference
         )
-        
-        # Run inference
-        try:
-            run_inference(single_config, args.output_path)
-            print(f"\n✓ Successfully completed combination {i}/{total_combinations}")
-        except subprocess.CalledProcessError:
-            print(f"\n❌ Failed at combination {i}/{total_combinations}")
-            print("Stopping batch inference due to error.")
-            sys.exit(1)
+        worker_id = ((i - 1) % num_workers) + 1
+        worker_args.append((i, total_combinations, single_config, args.output_path, worker_id))
+    
+    # Process in parallel
+    processing_times = []
+    failed_combinations = []
+    
+    if num_workers == 1:
+        # Sequential processing
+        print("Running in sequential mode (1 worker)\n")
+        for args_tuple in worker_args:
+            success, idx, error_msg, proc_time = inference_worker(args_tuple)
+            processing_times.append(proc_time)
+            if not success:
+                failed_combinations.append((idx, error_msg))
+                print(f"\n❌ Failed at combination {idx}/{total_combinations}")
+                print("Stopping batch inference due to error.")
+                sys.exit(1)
+    else:
+        # Parallel processing
+        print(f"Running in parallel mode ({num_workers} workers)\n")
+        with Pool(processes=num_workers) as pool:
+            # Process all combinations
+            for result in pool.imap(inference_worker, worker_args):
+                success, idx, error_msg, proc_time = result
+                processing_times.append(proc_time)
+                
+                if not success:
+                    failed_combinations.append((idx, error_msg))
+                    # Terminate pool and stop on first error
+                    pool.terminate()
+                    pool.join()
+                    print(f"\n❌ Failed at combination {idx}/{total_combinations}")
+                    print(f"   Error: {error_msg}")
+                    print("Stopping batch inference due to error.")
+                    sys.exit(1)
+    
+    # Success summary
+    total_time = time.time() - script_start_time
+    avg_time = sum(processing_times) / len(processing_times) if processing_times else 0
     
     print(f"\n{'='*80}")
     print(f"✅ Batch inference complete!")
-    print(f"   Processed {total_combinations} combinations successfully")
+    print(f"   Processed: {total_combinations} combinations successfully")
     print(f"   Output directory: {args.output_path}")
+    print(f"   Total time: {total_time:.1f}s ({total_time/60:.1f} min)")
+    print(f"   Avg per combination: {avg_time:.1f}s")
+    if num_workers > 1:
+        theoretical_sequential = avg_time * total_combinations
+        speedup = theoretical_sequential / total_time
+        print(f"   Speedup: {speedup:.1f}x (vs sequential)")
     print(f"{'='*80}\n")
 
 

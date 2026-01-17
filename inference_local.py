@@ -1253,34 +1253,22 @@ def validate_config(config, config_path):
     
     # Validate tts-seed (optional integer or null)
     tts_seed = config.get('tts-seed')
-    if tts_seed is not None:
-        if not isinstance(tts_seed, int):
-            print(f"Error: 'tts-seed' must be an integer or null")
-            sys.exit(1)
-        if tts_seed < 0 or tts_seed >= 2**63:
-            print(f"Error: 'tts-seed' must be between 0 and {2**63-1}")
-            sys.exit(1)
-    
+    if tts_seed is not None and not isinstance(tts_seed, int):
+        print(f"Error: 'tts-seed' must be an integer or null")
+        sys.exit(1)
+
     # Validate tts-noise (optional integer or null)
     tts_noise = config.get('tts-noise')
-    if tts_noise is not None:
-        if not isinstance(tts_noise, int):
-            print(f"Error: 'tts-noise' must be an integer or null")
-            sys.exit(1)
-        if tts_noise < 0 or tts_noise >= 2**63:
-            print(f"Error: 'tts-noise' must be between 0 and {2**63-1}")
-            sys.exit(1)
-    
+    if tts_noise is not None and not isinstance(tts_noise, int):
+        print(f"Error: 'tts-noise' must be an integer or null")
+        sys.exit(1)
+
     # Validate tts-cuda (optional integer or null)
     tts_cuda = config.get('tts-cuda')
-    if tts_cuda is not None:
-        if not isinstance(tts_cuda, int):
-            print(f"Error: 'tts-cuda' must be an integer or null")
-            sys.exit(1)
-        if tts_cuda < 0 or tts_cuda >= 2**63:
-            print(f"Error: 'tts-cuda' must be between 0 and {2**63-1}")
-            sys.exit(1)
-    
+    if tts_cuda is not None and not isinstance(tts_cuda, int):
+        print(f"Error: 'tts-cuda' must be an integer or null")
+        sys.exit(1)
+
     # Validate that tts-seed, tts-noise, and tts-cuda are all null or all set
     seed_states = [tts_seed is None, tts_noise is None, tts_cuda is None]
     if not all(seed_states) and not all(not s for s in seed_states):
@@ -1840,6 +1828,8 @@ def main():
     tts_seed = config.get('tts-seed')
     tts_noise = config.get('tts-noise')
     tts_cuda = config.get('tts-cuda')
+    # print(config)
+    # exit(0)
     consistent_across_chunks = config.get('consistent-across-chunks', True)
     
     # Check if output already exists (skip if it does)
