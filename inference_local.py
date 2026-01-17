@@ -1957,36 +1957,64 @@ def main():
             shutil.move(str(temp_output_path), str(final_output_path))
             print(f"  WAV saved: {final_output_path.name}")
             
-            # Create details folder
-            details_dir = final_output_path.parent / "details"
-            details_dir.mkdir(exist_ok=True)
+            # Check if debug mode is enabled
+            debug_mode_enabled = config['debug-chunks']
             
-            # Save analysis to details folder
-            analysis_filename = f"{final_output_path.stem}_analysis.json"
-            analysis_path = details_dir / analysis_filename
-            save_analysis(analysis, str(analysis_path))
-            print(f"  Analysis saved: details/{analysis_filename}")
-            
-            # Move debug folder to details if it exists
-            temp_debug_folder = final_output_path.parent / f"{temp_output_path.stem}_debug"
-            final_debug_folder = details_dir / f"{final_output_path.stem}_debug"
-            if temp_debug_folder.exists():
-                shutil.move(str(temp_debug_folder), str(final_debug_folder))
-                print(f"  Debug folder moved: details/{final_debug_folder.name}/")
-            
-            # Save config to details folder (with all seeds)
-            config_filename = f"{final_output_path.stem}_config.json"
-            config_path_output = details_dir / config_filename
-            config_with_output = copy.deepcopy(config)
-            config_with_output['output-path'] = str(final_output_path).replace('\\', '/')
-            config_with_output['tts-seed'] = int(base_seed)
-            config_with_output['tts-noise'] = int(base_noise_seed)
-            config_with_output['tts-cuda'] = int(base_cuda_seed)
-            config_with_output['consistent-across-chunks'] = consistent_across_chunks
-            
-            with open(config_path_output, 'w', encoding='utf-8') as f:
-                json.dump(config_with_output, f, indent=2, ensure_ascii=False)
-            print(f"  Config saved: details/{config_filename}")
+            if debug_mode_enabled:
+                # Debug mode: Save analysis and config inside the debug folder
+                temp_debug_folder = final_output_path.parent / f"{temp_output_path.stem}_debug"
+                final_debug_folder = final_output_path.parent / f"{final_output_path.stem}_debug"
+                
+                if temp_debug_folder.exists():
+                    # Rename debug folder to match final output name
+                    shutil.move(str(temp_debug_folder), str(final_debug_folder))
+                    print(f"  Debug folder: {final_debug_folder.name}/")
+                    
+                    # Save analysis to debug folder
+                    analysis_filename = f"{final_output_path.stem}_analysis.json"
+                    analysis_path = final_debug_folder / analysis_filename
+                    save_analysis(analysis, str(analysis_path))
+                    print(f"  Analysis saved: {final_debug_folder.name}/{analysis_filename}")
+                    
+                    # Save config to debug folder (with all seeds)
+                    config_filename = f"{final_output_path.stem}_config.json"
+                    config_path_output = final_debug_folder / config_filename
+                    config_with_output = copy.deepcopy(config)
+                    config_with_output['output-path'] = str(final_output_path).replace('\\', '/')
+                    config_with_output['tts-seed'] = int(base_seed)
+                    config_with_output['tts-noise'] = int(base_noise_seed)
+                    config_with_output['tts-cuda'] = int(base_cuda_seed)
+                    config_with_output['consistent-across-chunks'] = consistent_across_chunks
+                    
+                    with open(config_path_output, 'w', encoding='utf-8') as f:
+                        json.dump(config_with_output, f, indent=2, ensure_ascii=False)
+                    print(f"  Config saved: {final_debug_folder.name}/{config_filename}")
+                else:
+                    print(f"  Warning: Debug folder not found at {temp_debug_folder}")
+            else:
+                # Non-debug mode: Save analysis and config to details folder
+                details_dir = final_output_path.parent / "details"
+                details_dir.mkdir(exist_ok=True)
+                
+                # Save analysis to details folder
+                analysis_filename = f"{final_output_path.stem}_analysis.json"
+                analysis_path = details_dir / analysis_filename
+                save_analysis(analysis, str(analysis_path))
+                print(f"  Analysis saved: details/{analysis_filename}")
+                
+                # Save config to details folder (with all seeds)
+                config_filename = f"{final_output_path.stem}_config.json"
+                config_path_output = details_dir / config_filename
+                config_with_output = copy.deepcopy(config)
+                config_with_output['output-path'] = str(final_output_path).replace('\\', '/')
+                config_with_output['tts-seed'] = int(base_seed)
+                config_with_output['tts-noise'] = int(base_noise_seed)
+                config_with_output['tts-cuda'] = int(base_cuda_seed)
+                config_with_output['consistent-across-chunks'] = consistent_across_chunks
+                
+                with open(config_path_output, 'w', encoding='utf-8') as f:
+                    json.dump(config_with_output, f, indent=2, ensure_ascii=False)
+                print(f"  Config saved: details/{config_filename}")
             
         except Exception as e:
             print(f"  Warning: Voice analysis/organization failed: {e}")
