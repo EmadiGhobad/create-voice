@@ -21,13 +21,19 @@ def create_modern_ui():
     
     # Custom CSS for layout and navigation
     custom_css = """
-    /* Remove default Gradio padding */
+    /* ============================================
+       BASE STYLES & RESET
+       ============================================ */
+    
     .gradio-container {
         max-width: 100% !important;
         padding: 0 !important;
     }
     
-    /* Main layout container */
+    /* ============================================
+       LAYOUT STRUCTURE
+       ============================================ */
+    
     .main-layout {
         display: flex;
         height: 100vh;
@@ -35,13 +41,31 @@ def create_modern_ui():
         padding: 0;
     }
     
-    /* Sidebar styling */
+    /* Mobile Menu Toggle */
+    .mobile-menu-btn {
+        display: none;
+        width: 32px;
+        height: 32px;
+        border-radius: 6px;
+        border: 1px solid #e5e7eb;
+        background-color: #ffffff;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 18px;
+    }
+    
+    /* ============================================
+       SIDEBAR
+       ============================================ */
+    
     .sidebar {
         width: 250px;
         background-color: #f8f9fa;
         border-right: 1px solid #e5e7eb;
         padding: 20px 0;
         overflow-y: auto;
+        transition: transform 0.3s ease;
     }
     
     /* Main content area */
@@ -54,7 +78,10 @@ def create_modern_ui():
         flex-direction: column;
     }
     
-    /* Header section */
+    /* ============================================
+       HEADER
+       ============================================ */
+    
     .header {
         padding: 14px 60px;
         border-bottom: 1px solid #e5e7eb;
@@ -187,7 +214,10 @@ def create_modern_ui():
         width: 100%;
     }
     
-    /* Brand section */
+    /* ============================================
+       NAVIGATION - BRAND
+       ============================================ */
+    
     .brand {
         padding: 14px 20px;
         margin-bottom: 20px;
@@ -206,7 +236,10 @@ def create_modern_ui():
         line-height: 1.3;
     }
     
-    /* Navigation section */
+    /* ============================================
+       NAVIGATION - SECTIONS & ITEMS
+       ============================================ */
+    
     .nav-section {
         padding: 0 12px;
         margin-bottom: 24px;
@@ -295,7 +328,10 @@ def create_modern_ui():
         background-color: #374151;
     }
     
-    /* Dark mode support */
+    /* ============================================
+       DARK MODE THEME
+       ============================================ */
+    
     .dark .sidebar {
         background-color: #1f2937;
         border-right-color: #374151;
@@ -356,12 +392,125 @@ def create_modern_ui():
         border-top-color: #374151;
     }
     
-    /* Feature Cards Section */
+    /* ============================================
+       FEATURE CARDS
+       ============================================ */
+    
     .features-grid {
         display: grid;
         grid-template-columns: repeat(6, 1fr);
         gap: 20px;
         margin-top: 30px;
+    }
+    
+    /* ============================================
+       RESPONSIVE DESIGN - BREAKPOINTS
+       ============================================ */
+    
+    /* Tablet: 1024px and below */
+    @media (max-width: 1024px) {
+        .features-grid {
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+        
+        .content-area {
+            padding: 30px 40px !important;
+        }
+        
+        .header {
+            padding: 14px 40px !important;
+        }
+        
+        /* Hide greeting on tablet and below */
+        .header-greeting {
+            display: none !important;
+        }
+    }
+    
+    /* Mobile: 768px and below */
+    @media (max-width: 768px) {
+        /* Layout adjustments */
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            height: 100vh;
+            z-index: 100;
+            transform: translateX(-100%);
+            box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .sidebar.open {
+            transform: translateX(0);
+        }
+        
+        .mobile-menu-btn {
+            display: flex !important;
+        }
+        
+        /* Header adjustments */
+        .header {
+            padding: 12px 20px !important;
+        }
+        
+        .search-box {
+            width: 160px !important;
+            font-size: 12px !important;
+        }
+        
+        /* Content adjustments */
+        .content-area {
+            padding: 20px 20px !important;
+        }
+        
+        /* Feature cards */
+        .features-grid {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+    }
+    
+    /* Small Mobile: 480px and below */
+    @media (max-width: 480px) {
+        /* Header compact mode */
+        .header-right {
+            gap: 6px !important;
+        }
+        
+        .header-btn {
+            width: 28px !important;
+            height: 28px !important;
+            font-size: 13px !important;
+        }
+        
+        .user-avatar {
+            width: 28px !important;
+            height: 28px !important;
+            font-size: 12px !important;
+        }
+        
+        .search-box {
+            display: none !important;
+        }
+        
+        /* Feature cards extra small */
+        .features-grid {
+            gap: 10px;
+        }
+        
+        .feature-card-box {
+            font-size: 32px !important;
+            border-radius: 10px !important;
+        }
+        
+        .feature-card-title {
+            font-size: 11px !important;
+        }
+        
+        .content-area {
+            padding: 16px 16px !important;
+        }
     }
     
     .feature-card {
@@ -552,6 +701,11 @@ def create_modern_ui():
                 gr.HTML("""
                 <div class="header">
                     <div class="header-left">
+                        <!-- Mobile Menu Button -->
+                        <button class="mobile-menu-btn" onclick="toggleMobileSidebar()">
+                            ☰
+                        </button>
+                        
                         <div class="header-greeting">
                             <h1>Good evening, Ghobad</h1>
                             <p>My Workspace</p>
@@ -591,6 +745,27 @@ def create_modern_ui():
                         </div>
                     </div>
                 </div>
+                
+                <script>
+                function toggleMobileSidebar() {
+                    const sidebar = document.querySelector('.sidebar');
+                    if (sidebar) {
+                        sidebar.classList.toggle('open');
+                    }
+                }
+                
+                // Close sidebar when clicking outside on mobile
+                document.addEventListener('click', function(event) {
+                    const sidebar = document.querySelector('.sidebar');
+                    const menuBtn = document.querySelector('.mobile-menu-btn');
+                    
+                    if (sidebar && sidebar.classList.contains('open')) {
+                        if (!sidebar.contains(event.target) && !menuBtn.contains(event.target)) {
+                            sidebar.classList.remove('open');
+                        }
+                    }
+                });
+                </script>
                 """)
                 
                 # Content Area
