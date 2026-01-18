@@ -56,7 +56,7 @@ def create_modern_ui():
     
     /* Header section */
     .header {
-        padding: 14px 40px;
+        padding: 14px 60px;
         border-bottom: 1px solid #e5e7eb;
         background-color: #ffffff;
         display: flex;
@@ -180,8 +180,11 @@ def create_modern_ui():
     /* Content area below header */
     .content-area {
         flex: 1;
-        padding: 40px;
+        padding: 30px 60px;
         overflow-y: auto;
+        max-width: 1600px;
+        margin: 0 auto;
+        width: 100%;
     }
     
     /* Brand section */
@@ -352,6 +355,78 @@ def create_modern_ui():
     .dark .upgrade-section {
         border-top-color: #374151;
     }
+    
+    /* Feature Cards Section */
+    .features-grid {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 20px;
+        margin-top: 30px;
+    }
+    
+    .feature-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        cursor: pointer;
+    }
+    
+    .feature-card-box {
+        width: 100%;
+        aspect-ratio: 1;
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 48px;
+        transition: all 0.2s;
+        background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+    }
+    
+    .feature-card:hover .feature-card-box {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        border-color: #d1d5db;
+        background: #ffffff;
+    }
+    
+    .feature-card-title {
+        font-size: 14px;
+        font-weight: 500;
+        color: #1f2937;
+        margin: 0;
+        text-align: center;
+    }
+    
+    .feature-card-description {
+        display: none;
+    }
+    
+    .feature-card-visual {
+        display: none;
+    }
+    
+    /* Dark mode for feature cards */
+    .dark .feature-card-box {
+        background: linear-gradient(135deg, #374151 0%, #1f2937 100%);
+        border-color: #374151;
+    }
+    
+    .dark .feature-card:hover .feature-card-box {
+        background: #374151;
+        border-color: #4b5563;
+    }
+    
+    .dark .feature-card-title {
+        color: #f9fafb;
+    }
+    
+    .dark .content-area {
+        background-color: #111827;
+    }
     """
     
     with gr.Blocks(
@@ -520,8 +595,47 @@ def create_modern_ui():
                 
                 # Content Area
                 with gr.Column(elem_classes=["content-area"]):
-                    gr.Markdown("### Content Preview")
-                    gr.Markdown("Feature cards will be added in Task 4...")
+                    
+                    # Feature Cards Grid
+                    gr.HTML("""
+                    <div class="features-grid">
+                        <!-- Instant Speech Card -->
+                        <div class="feature-card">
+                            <div class="feature-card-box">📝</div>
+                            <h3 class="feature-card-title">Instant speech</h3>
+                        </div>
+                        
+                        <!-- Audiobook Card -->
+                        <div class="feature-card">
+                            <div class="feature-card-box">📕</div>
+                            <h3 class="feature-card-title">Audiobook</h3>
+                        </div>
+                        
+                        <!-- Image & Video Card -->
+                        <div class="feature-card">
+                            <div class="feature-card-box">🎬</div>
+                            <h3 class="feature-card-title">Image & Video</h3>
+                        </div>
+                        
+                        <!-- AI Agents Card -->
+                        <div class="feature-card">
+                            <div class="feature-card-box">🤖</div>
+                            <h3 class="feature-card-title">AI Agents</h3>
+                        </div>
+                        
+                        <!-- Music Card -->
+                        <div class="feature-card">
+                            <div class="feature-card-box">🎵</div>
+                            <h3 class="feature-card-title">Music</h3>
+                        </div>
+                        
+                        <!-- Dubbed Video Card -->
+                        <div class="feature-card">
+                            <div class="feature-card-box">🌍</div>
+                            <h3 class="feature-card-title">Dubbed video</h3>
+                        </div>
+                    </div>
+                    """)
     
     return demo
 
