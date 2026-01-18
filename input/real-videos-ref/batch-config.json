@@ -1,0 +1,88 @@
+{
+  "batch-id": 7,
+  "texts": {
+	"content": "dressed for dinner, dad stood at the bar, flipping through the newspaper, while Mom sat in her favorite chair by the fire, smoking a cigarette and reading a gram-green novel. The gentle breeze carried warm scents as leaves rustled softly in the trees. She paused, listened carefully, and then spoke with quiet confidence. Bright ideas often emerge during moments of stillness and reflection. Footsteps echoed down the hallway, creating a sense of calm anticipation. A peaceful smile appeared as the familiar melody played in the background. After the quiet rain ended, the curious traveler slowly crossed the empty street and smiled. Soft morning light drifted through the open window while distant birdsong filled the calm room. Today, I am sharing seven powerful reminders that will snap you out of your funk and put you back in charge of your life.",
+	"chunk-policy": "Sentence"
+  },
+  "steps": [
+	20
+  ],
+  "alpha": [
+	0.0,
+	0.25,
+	0.50,
+	0.75,
+	1.0
+  ],
+  "beta": [
+	0.0,
+	0.25,
+	0.50,
+	0.75,
+	1.0
+  ],
+  "embedding-scale": [
+	2
+  ],
+  "references": [
+	{
+	  "id": "v1",
+	  "speakers": [
+		{
+		  "name": "mix",
+		  "paths": [
+			"input/real-videos-ref/grace-beverley/q5.7_grace-beverley_001715-001725_Plan With Me For 2026： A Step-by-Step Framework For Actually Effective Goal Setting [kHbdjlyMrVQ].wav"
+		  ],
+		  "sample-prosody-index": -1,
+		  "timbre-weight": 1,
+		  "prosody-weight": 1
+		},
+		{
+		  "name": "mix",
+		  "paths": [
+			"input/real-videos-ref/Joanna-Wiebe/q5.1_Joanna-Wiebe_000005-000015_How To Be A Top 1% Writer Using AI [ybr92sASdvo].wav"
+		  ],
+		  "sample-prosody-index": -1,
+		  "timbre-weight": 1,
+		  "prosody-weight": 1
+		},
+		{
+		  "name": "mix",
+		  "paths": [
+			"input/real-videos-ref/Julia-Whelan/Julia Whelan_000105-000115.wav"
+		  ],
+		  "sample-prosody-index": -1,
+		  "timbre-weight": 1,
+		  "prosody-weight": 1
+		},
+		{
+		  "name": "mix",
+		  "paths": [
+			"input/real-videos-ref/Leila-Hormozi/q4.4_Leila-Hormozi_000315-000325_How to Articulate Your Thoughts More Clearly Than 99% of People [QZXE2-sFWxQ].wav"
+		  ],
+		  "sample-prosody-index": -1,
+		  "timbre-weight": 1,
+		  "prosody-weight": 1
+		},
+		{
+		  "name": "mix",
+		  "paths": [
+			"input/real-videos-ref/mel-robbins/q6.4_mel-robbins_002250-002300_7 Things You Need to Hear Right Now [-UYbtU-wRvU].wav"
+		  ],
+		  "sample-prosody-index": -1,
+		  "timbre-weight": 1,
+		  "prosody-weight": 1
+		}
+	  ]
+	}
+  ],
+  "max-tokens": 512,
+  "crossfade-ms": 50,
+  "normalize": true,
+  "pronunciation-dict": "pronunciation_dict.json",
+  "debug-chunks": true,
+  "tts_seed": null,
+  "tts_noise": null,
+  "tts_cuda": null,
+  "consistent-across-chunks": false
+}

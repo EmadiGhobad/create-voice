@@ -1,7 +1,7 @@
 """
-Modern TTS Studio Layout - Task 2: Navigation Sidebar
+Modern TTS Studio Layout - Task 3: Header Section
 
-Task: Build complete navigation sidebar with sections and menu items
+Task: Add header with greeting, user info, and action buttons
 """
 
 import gradio as gr
@@ -11,11 +11,12 @@ def create_modern_ui():
     """
     Create modern TTS UI layout.
     
-    Task 2: Navigation sidebar with sections
-    - Multiple navigation sections
-    - Menu items with icons
-    - Active state styling
-    - Professional spacing
+    Task 3: Header section with user info
+    - Personalized greeting
+    - User avatar/profile
+    - Quick action buttons
+    - Search functionality
+    - Settings/theme toggle
     """
     
     # Custom CSS for layout and navigation
@@ -46,26 +47,160 @@ def create_modern_ui():
     /* Main content area */
     .main-content {
         flex: 1;
-        padding: 40px;
+        padding: 0;
         overflow-y: auto;
         background-color: #ffffff;
+        display: flex;
+        flex-direction: column;
     }
     
-    /* Logo/Brand section */
-    .brand {
-        padding: 0 20px 20px 20px;
+    /* Header section */
+    .header {
+        padding: 14px 40px;
         border-bottom: 1px solid #e5e7eb;
+        background-color: #ffffff;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+    
+    .header-left {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        flex: 1;
+    }
+    
+    .header-greeting h1 {
+        font-size: 18px;
+        font-weight: 600;
+        margin: 0;
+        color: #1f2937;
+        line-height: 1.3;
+    }
+    
+    .header-greeting p {
+        font-size: 12px;
+        color: #6b7280;
+        margin: 2px 0 0 0;
+        line-height: 1.3;
+    }
+    
+    .header-right {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    
+    /* Search bar */
+    .search-box {
+        display: flex;
+        align-items: center;
+        background-color: #f3f4f6;
+        border-radius: 6px;
+        padding: 6px 12px;
+        gap: 8px;
+        width: 260px;
+        height: 32px;
+    }
+    
+    .search-box input {
+        border: none;
+        background: transparent;
+        outline: none;
+        width: 100%;
+        font-size: 12px;
+        color: #1f2937;
+    }
+    
+    .search-box input::placeholder {
+        color: #9ca3af;
+    }
+    
+    /* Header buttons */
+    .header-btn {
+        width: 32px;
+        height: 32px;
+        border-radius: 6px;
+        border: 1px solid #e5e7eb;
+        background-color: #ffffff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 15px;
+    }
+    
+    .header-btn:hover {
+        background-color: #f3f4f6;
+        border-color: #d1d5db;
+    }
+    
+    .header-btn.has-notification {
+        position: relative;
+    }
+    
+    .header-btn.has-notification::after {
+        content: '';
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        width: 7px;
+        height: 7px;
+        background-color: #ef4444;
+        border-radius: 50%;
+        border: 2px solid #ffffff;
+    }
+    
+    /* User avatar */
+    .user-avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: 600;
+        font-size: 14px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .user-avatar:hover {
+        transform: scale(1.05);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+    
+    /* Content area below header */
+    .content-area {
+        flex: 1;
+        padding: 40px;
+        overflow-y: auto;
+    }
+    
+    /* Brand section */
+    .brand {
+        padding: 14px 20px;
         margin-bottom: 20px;
+        display: flex;
+        align-items: center;
     }
     
     .brand h2 {
-        font-size: 20px;
+        font-size: 18px;
         font-weight: 600;
         margin: 0;
         color: #1f2937;
         display: flex;
         align-items: center;
         gap: 8px;
+        line-height: 1.3;
     }
     
     /* Navigation section */
@@ -164,6 +299,36 @@ def create_modern_ui():
     }
     
     .dark .main-content {
+        background-color: #111827;
+    }
+    
+    .dark .header {
+        background-color: #1f2937;
+        border-bottom-color: #374151;
+    }
+    
+    .dark .header-greeting h1 {
+        color: #f9fafb;
+    }
+    
+    .dark .search-box {
+        background-color: #374151;
+    }
+    
+    .dark .search-box input {
+        color: #f9fafb;
+    }
+    
+    .dark .header-btn {
+        background-color: #1f2937;
+        border-color: #374151;
+    }
+    
+    .dark .header-btn:hover {
+        background-color: #374151;
+    }
+    
+    .dark .content-area {
         background-color: #111827;
     }
     
@@ -305,22 +470,58 @@ def create_modern_ui():
                 </div>
                 """)
             
-            # Main Content Area
+            # Main Content Area with Header
             with gr.Column(scale=1, elem_classes=["main-content"]):
+                
+                # Header Section
                 gr.HTML("""
-                <div style="margin-bottom: 30px;">
-                    <h1 style="font-size: 32px; font-weight: 600; margin: 0 0 8px 0;">
-                        Good evening, Ghobad
-                    </h1>
-                    <p style="color: #6b7280; font-size: 16px; margin: 0;">
-                        My Workspace
-                    </p>
+                <div class="header">
+                    <div class="header-left">
+                        <div class="header-greeting">
+                            <h1>Good evening, Ghobad</h1>
+                            <p>My Workspace</p>
+                        </div>
+                    </div>
+                    <div class="header-right">
+                        <!-- Search Bar -->
+                        <div class="search-box">
+                            <span>🔍</span>
+                            <input type="text" placeholder="Search..." />
+                        </div>
+                        
+                        <!-- Action Buttons -->
+                        <button class="header-btn" title="Feedback">
+                            💬
+                        </button>
+                        
+                        <button class="header-btn" title="Documentation">
+                            📚
+                        </button>
+                        
+                        <button class="header-btn has-notification" title="Notifications">
+                            🔔
+                        </button>
+                        
+                        <button class="header-btn" title="Settings">
+                            ⚙️
+                        </button>
+                        
+                        <button class="header-btn" title="Theme Toggle">
+                            🌙
+                        </button>
+                        
+                        <!-- User Avatar -->
+                        <div class="user-avatar" title="Profile">
+                            G
+                        </div>
+                    </div>
                 </div>
                 """)
                 
-                # Placeholder for content (will add in next steps)
-                gr.Markdown("### Content Preview")
-                gr.Markdown("Feature cards and content will be added in Task 3 & 4...")
+                # Content Area
+                with gr.Column(elem_classes=["content-area"]):
+                    gr.Markdown("### Content Preview")
+                    gr.Markdown("Feature cards will be added in Task 4...")
     
     return demo
 
