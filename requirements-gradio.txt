@@ -1,0 +1,13 @@
+# Gradio UI Requirements
+# Install with: pip install -r requirements-gradio.txt
+
+# UI Framework
+gradio>=4.0.0
+
+# Already in your requirements.txt, but listed here for reference:
+# torch>=1.9.0
+# torchaudio>=0.9.0
+# soundfile>=0.10.0
+# librosa>=0.8.0
+# pyyaml>=5.4.0
+
