@@ -409,6 +409,7 @@ def create_modern_ui():
     
     .two-column-layout {
         display: grid;
+        /* Exact 50/50 split */
         grid-template-columns: 1fr 1fr;
         gap: 40px;
         margin-top: 50px;
@@ -428,61 +429,60 @@ def create_modern_ui():
     .library-column {
         display: flex;
         flex-direction: column;
+        /* Prevent content overflow from forcing column width */
+        min-width: 0;
+        max-width: 100%;
     }
     
     .voice-list {
         display: flex;
         flex-direction: column;
-        gap: 0;
+        gap: 8px;
         margin-bottom: 16px;
+        width: 100%;
     }
     
     .voice-row {
         display: flex;
         align-items: center;
-        gap: 16px;
-        padding: 16px;
+        gap: 12px;
+        padding: 12px;
         background: white;
-        border-bottom: 1px solid #e5e7eb;
+        border-radius: 8px;
         cursor: pointer;
         transition: all 0.2s;
+        min-height: 70px;
+        width: 100%;
+        box-sizing: border-box;
     }
     
     .voice-row:hover {
         background-color: #f9fafb;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
     }
     
-    .voice-row:first-child {
-        border-top-left-radius: 8px;
-        border-top-right-radius: 8px;
-    }
-    
-    .voice-row:last-child {
-        border-bottom-left-radius: 8px;
-        border-bottom-right-radius: 8px;
-        border-bottom: none;
-    }
-    
-    .voice-row-avatar {
+    /* LEFT: Square icon box - size is double the row height */
+    /* NO TEXT inside this box, only emoji/icon */
+    .voice-icon-box {
         position: relative;
-        width: 48px;
-        height: 48px;
+        width: 60px;
+        height: 60px;
         background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
-        border-radius: 50%;
+        border-radius: 8px;
         display: flex;
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
     }
     
-    .avatar-emoji {
-        font-size: 24px;
+    .voice-icon {
+        font-size: 32px;
     }
     
-    .play-icon {
+    .play-badge {
         position: absolute;
-        bottom: -2px;
-        left: -2px;
+        bottom: -4px;
+        left: -4px;
         background: white;
         width: 20px;
         height: 20px;
@@ -491,26 +491,31 @@ def create_modern_ui():
         align-items: center;
         justify-content: center;
         font-size: 10px;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     }
     
-    .voice-row-info {
+    /* RIGHT: Two lines of text (title + description) */
+    .voice-info {
         flex: 1;
         min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
     }
     
-    .voice-row-title {
-        font-size: 14px;
+    /* Smaller fonts - 2 sizes less */
+    .voice-title {
+        font-size: 13px;
         font-weight: 600;
         color: #111827;
-        margin: 0 0 4px 0;
+        margin: 0;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
     }
     
-    .voice-row-description {
-        font-size: 13px;
+    .voice-description {
+        font-size: 12px;
         color: #6b7280;
         margin: 0;
         white-space: nowrap;
@@ -543,12 +548,16 @@ def create_modern_ui():
     .create-column {
         display: flex;
         flex-direction: column;
+        /* Prevent content overflow from forcing column width */
+        min-width: 0;
+        max-width: 100%;
     }
     
     .create-options {
         display: flex;
         flex-direction: column;
         gap: 16px;
+        width: 100%;
     }
     
     .create-option {
@@ -561,6 +570,8 @@ def create_modern_ui():
         border-radius: 12px;
         cursor: pointer;
         transition: all 0.2s;
+        width: 100%;
+        box-sizing: border-box;
     }
     
     .create-option:hover {
@@ -802,19 +813,23 @@ def create_modern_ui():
     /* Dark mode support */
     .dark .voice-row {
         background-color: #1f2937;
-        border-bottom-color: #374151;
     }
     
     .dark .voice-row:hover {
         background-color: #374151;
     }
     
-    .dark .voice-row-title {
+    .dark .voice-title {
         color: #f9fafb;
     }
     
-    .dark .voice-row-description {
+    .dark .voice-description {
         color: #9ca3af;
+    }
+    
+    .dark .play-badge {
+        background: #111827;
+        color: white;
     }
     
     .dark .section-title {
@@ -988,30 +1003,34 @@ def create_modern_ui():
         }
         
         .voice-row {
-            padding: 12px;
+            padding: 10px;
+            gap: 10px;
+            min-height: 60px;
         }
         
-        .voice-row-avatar {
-            width: 40px;
-            height: 40px;
+        .voice-icon-box {
+            width: 50px;
+            height: 50px;
         }
         
-        .avatar-emoji {
-            font-size: 20px;
+        .voice-icon {
+            font-size: 26px;
         }
         
-        .play-icon {
-            width: 16px;
-            height: 16px;
-            font-size: 8px;
+        .play-badge {
+            width: 18px;
+            height: 18px;
+            font-size: 9px;
+            bottom: -3px;
+            left: -3px;
         }
         
-        .voice-row-title {
-            font-size: 13px;
-        }
-        
-        .voice-row-description {
+        .voice-title {
             font-size: 12px;
+        }
+        
+        .voice-description {
+            font-size: 11px;
         }
         
         .create-option {
@@ -1121,17 +1140,32 @@ def create_modern_ui():
         }
         
         .voice-row {
-            padding: 10px;
-            gap: 12px;
+            padding: 8px;
+            gap: 8px;
+            min-height: 50px;
         }
         
-        .voice-row-avatar {
-            width: 36px;
-            height: 36px;
+        .voice-icon-box {
+            width: 44px;
+            height: 44px;
         }
         
-        .avatar-emoji {
-            font-size: 18px;
+        .voice-icon {
+            font-size: 22px;
+        }
+        
+        .play-badge {
+            width: 16px;
+            height: 16px;
+            font-size: 8px;
+        }
+        
+        .voice-title {
+            font-size: 11px;
+        }
+        
+        .voice-description {
+            font-size: 10px;
         }
         
         .create-option {
@@ -1217,13 +1251,13 @@ def create_modern_ui():
         background-color: #111827;
     }
     """
-
+    
     with gr.Blocks(
-            css=custom_css,
-            title="TTS Studio",
-            theme=gr.themes.Soft()
+        css=custom_css,
+        title="TTS Studio",
+        theme=gr.themes.Soft()
     ) as demo:
-
+        
         with gr.Row(elem_classes=["main-layout"]):
             # Left Sidebar
             with gr.Column(scale=0, elem_classes=["sidebar"], min_width=250):
@@ -1234,7 +1268,7 @@ def create_modern_ui():
                     <h2>🎙️ TTS Studio</h2>
                 </div>
                 """)
-
+                
                 # Main Navigation Section
                 gr.HTML("""
                 <div class="nav-section">
@@ -1349,7 +1383,7 @@ def create_modern_ui():
                         <div class="header-greeting">
                             <h1>Good evening, Ghobad</h1>
                             <p>My Workspace</p>
-                        </div>
+                </div>
                     </div>
                     <div class="header-right">
                         <!-- Search Bar -->
@@ -1462,61 +1496,61 @@ def create_modern_ui():
                             <div class="voice-list">
                                 <!-- Voice Row 1 -->
                                 <div class="voice-row" onclick="openAudioPlayer('Peter', 'Natural, Professional Narrator')">
-                                    <div class="voice-row-avatar">
-                                        <span class="avatar-emoji">👨</span>
-                                        <span class="play-icon">▶️</span>
+                                    <div class="voice-icon-box">
+                                        <span class="voice-icon">👨</span>
+                                        <span class="play-badge">▶️</span>
                                     </div>
-                                    <div class="voice-row-info">
-                                        <h3 class="voice-row-title">Peter - Natural, Professional Narrator</h3>
-                                        <p class="voice-row-description">Peter - Middle-aged Dutch male with a warm, reliable tone. Perfect for news...</p>
+                                    <div class="voice-info">
+                                        <h3 class="voice-title">Peter - Natural, Professional Narrator</h3>
+                                        <p class="voice-description">Peter - Middle-aged Dutch male with a warm, reliable tone. Perfect for news...</p>
                                     </div>
                                 </div>
                                 
                                 <!-- Voice Row 2 -->
                                 <div class="voice-row" onclick="openAudioPlayer('Bella', 'Customer Support Agent')">
-                                    <div class="voice-row-avatar">
-                                        <span class="avatar-emoji">👩</span>
-                                        <span class="play-icon">▶️</span>
+                                    <div class="voice-icon-box">
+                                        <span class="voice-icon">👩</span>
+                                        <span class="play-badge">▶️</span>
                                     </div>
-                                    <div class="voice-row-info">
-                                        <h3 class="voice-row-title">Bella - Customer Support Agent</h3>
-                                        <p class="voice-row-description">Bella Ai - Conversational Dutch female Voice.</p>
+                                    <div class="voice-info">
+                                        <h3 class="voice-title">Bella - Customer Support Agent</h3>
+                                        <p class="voice-description">Bella Ai - Conversational Dutch female Voice.</p>
                                     </div>
                                 </div>
                                 
                                 <!-- Voice Row 3 -->
                                 <div class="voice-row" onclick="openAudioPlayer('Wilco', 'Natural and Fast-Paced Narrator')">
-                                    <div class="voice-row-avatar">
-                                        <span class="avatar-emoji">🎙️</span>
-                                        <span class="play-icon">▶️</span>
+                                    <div class="voice-icon-box">
+                                        <span class="voice-icon">🎙️</span>
+                                        <span class="play-badge">▶️</span>
                                     </div>
-                                    <div class="voice-row-info">
-                                        <h3 class="voice-row-title">Wilco - Natural and Fast-Paced Narrator</h3>
-                                        <p class="voice-row-description">Wiloco - Voice chaos, the only AI voice that comes out better than the...</p>
+                                    <div class="voice-info">
+                                        <h3 class="voice-title">Wilco - Natural and Fast-Paced Narrator</h3>
+                                        <p class="voice-description">Wiloco - Voice chaos, the only AI voice that comes out better than the...</p>
                                     </div>
                                 </div>
                                 
                                 <!-- Voice Row 4 -->
                                 <div class="voice-row" onclick="openAudioPlayer('Hans Claesen', 'Engaging Storyteller')">
-                                    <div class="voice-row-avatar">
-                                        <span class="avatar-emoji">👨‍🦰</span>
-                                        <span class="play-icon">▶️</span>
+                                    <div class="voice-icon-box">
+                                        <span class="voice-icon">👨‍🦰</span>
+                                        <span class="play-badge">▶️</span>
                                     </div>
-                                    <div class="voice-row-info">
-                                        <h3 class="voice-row-title">Hans Claesen - Engaging Storyteller</h3>
-                                        <p class="voice-row-description">Hans Claesen - Conversational - Warm and authentic Flemish voice, perfect...</p>
+                                    <div class="voice-info">
+                                        <h3 class="voice-title">Hans Claesen - Engaging Storyteller</h3>
+                                        <p class="voice-description">Hans Claesen - Conversational - Warm and authentic Flemish voice, perfect...</p>
                                     </div>
                                 </div>
                                 
                                 <!-- Voice Row 5 -->
                                 <div class="voice-row" onclick="openAudioPlayer('Charles', 'Balanced, Calm and Supportive')">
-                                    <div class="voice-row-avatar">
-                                        <span class="avatar-emoji">🧔</span>
-                                        <span class="play-icon">▶️</span>
+                                    <div class="voice-icon-box">
+                                        <span class="voice-icon">🧔</span>
+                                        <span class="play-badge">▶️</span>
                                     </div>
-                                    <div class="voice-row-info">
-                                        <h3 class="voice-row-title">Charles - Balanced, Calm and Supportive</h3>
-                                        <p class="voice-row-description">Charles - Deep "Gents" voice.</p>
+                                    <div class="voice-info">
+                                        <h3 class="voice-title">Charles - Balanced, Calm and Supportive</h3>
+                                        <p class="voice-description">Charles - Deep "Gents" voice.</p>
                                     </div>
                                 </div>
                             </div>
@@ -1626,7 +1660,7 @@ def create_modern_ui():
                     }
                     </script>
                     """)
-
+    
     return demo
 
 
