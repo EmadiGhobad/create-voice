@@ -10,7 +10,7 @@ import gradio as gr
 def create_modern_ui():
     """
     Create modern TTS UI layout.
-    
+
     Task 3: Header section with user info
     - Personalized greeting
     - User avatar/profile
@@ -18,7 +18,7 @@ def create_modern_ui():
     - Search functionality
     - Settings/theme toggle
     """
-    
+
     # Custom CSS for layout and navigation
     custom_css = """
     /* ============================================
@@ -404,6 +404,489 @@ def create_modern_ui():
     }
     
     /* ============================================
+       TWO-COLUMN LAYOUT (VOICE LIBRARY + CREATE/CLONE)
+       ============================================ */
+    
+    .two-column-layout {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 40px;
+        margin-top: 50px;
+    }
+    
+    .section-title {
+        font-size: 20px;
+        font-weight: 600;
+        color: #111827;
+        margin: 0 0 24px 0;
+    }
+    
+    /* ============================================
+       LEFT COLUMN: VOICE LIST (HORIZONTAL ROWS)
+       ============================================ */
+    
+    .library-column {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .voice-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        margin-bottom: 16px;
+    }
+    
+    .voice-row {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 16px;
+        background: white;
+        border-bottom: 1px solid #e5e7eb;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .voice-row:hover {
+        background-color: #f9fafb;
+    }
+    
+    .voice-row:first-child {
+        border-top-left-radius: 8px;
+        border-top-right-radius: 8px;
+    }
+    
+    .voice-row:last-child {
+        border-bottom-left-radius: 8px;
+        border-bottom-right-radius: 8px;
+        border-bottom: none;
+    }
+    
+    .voice-row-avatar {
+        position: relative;
+        width: 48px;
+        height: 48px;
+        background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+    
+    .avatar-emoji {
+        font-size: 24px;
+    }
+    
+    .play-icon {
+        position: absolute;
+        bottom: -2px;
+        left: -2px;
+        background: white;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    }
+    
+    .voice-row-info {
+        flex: 1;
+        min-width: 0;
+    }
+    
+    .voice-row-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: #111827;
+        margin: 0 0 4px 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    .voice-row-description {
+        font-size: 13px;
+        color: #6b7280;
+        margin: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    .explore-library-btn {
+        padding: 10px 20px;
+        background-color: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 500;
+        color: #374151;
+        cursor: pointer;
+        transition: all 0.2s;
+        align-self: flex-start;
+    }
+    
+    .explore-library-btn:hover {
+        background-color: #f9fafb;
+        border-color: #d1d5db;
+    }
+    
+    /* ============================================
+       RIGHT COLUMN: CREATE/CLONE OPTIONS
+       ============================================ */
+    
+    .create-column {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .create-options {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+    
+    .create-option {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        padding: 24px;
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .create-option:hover {
+        background-color: white;
+        border-color: #d1d5db;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    }
+    
+    .create-option-icon {
+        width: 56px;
+        height: 56px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 28px;
+        flex-shrink: 0;
+    }
+    
+    .voice-design-icon {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    }
+    
+    .clone-voice-icon {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    }
+    
+    .collections-icon {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    }
+    
+    .create-option-content {
+        flex: 1;
+    }
+    
+    .create-option-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: #111827;
+        margin: 0 0 4px 0;
+    }
+    
+    .create-option-description {
+        font-size: 13px;
+        color: #6b7280;
+        margin: 0;
+        line-height: 1.5;
+    }
+    
+    /* ============================================
+       AUDIO PLAYER COMPONENT (REUSABLE)
+       ============================================ */
+    
+    .audio-player {
+        position: fixed;
+        bottom: 0;
+        left: 260px;
+        right: 0;
+        background: white;
+        border-top: 1px solid #e5e7eb;
+        box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
+        padding: 16px 40px;
+        z-index: 50;
+        transition: all 0.3s;
+    }
+    
+    .audio-player.hidden {
+        transform: translateY(100%);
+    }
+    
+    .audio-player-close {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        background: none;
+        border: none;
+        font-size: 20px;
+        color: #6b7280;
+        cursor: pointer;
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 6px;
+        transition: all 0.2s;
+    }
+    
+    .audio-player-close:hover {
+        background-color: #f3f4f6;
+        color: #111827;
+    }
+    
+    .audio-player-content {
+        display: flex;
+        align-items: center;
+        gap: 32px;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+    
+    .audio-player-info {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 250px;
+    }
+    
+    .audio-player-avatar {
+        width: 48px;
+        height: 48px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        flex-shrink: 0;
+    }
+    
+    .audio-player-details h4 {
+        font-size: 14px;
+        font-weight: 600;
+        color: #111827;
+        margin: 0 0 2px 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    .audio-player-details p {
+        font-size: 12px;
+        color: #6b7280;
+        margin: 0;
+    }
+    
+    .audio-player-controls {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    
+    .control-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #374151;
+        transition: all 0.2s;
+        position: relative;
+        padding: 8px;
+    }
+    
+    .control-btn:hover {
+        color: #111827;
+    }
+    
+    .control-label {
+        font-size: 10px;
+        position: absolute;
+        bottom: 2px;
+    }
+    
+    .play-pause-btn {
+        width: 48px;
+        height: 48px;
+        background-color: #111827;
+        border-radius: 50%;
+        color: white;
+        font-size: 20px;
+    }
+    
+    .play-pause-btn:hover {
+        background-color: #000000;
+        transform: scale(1.05);
+    }
+    
+    .rewind-icon, .forward-icon {
+        font-size: 24px;
+    }
+    
+    .audio-player-progress {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    
+    .progress-time {
+        font-size: 12px;
+        color: #6b7280;
+        min-width: 40px;
+    }
+    
+    .progress-bar {
+        flex: 1;
+        height: 4px;
+        background-color: #e5e7eb;
+        border-radius: 2px;
+        position: relative;
+        cursor: pointer;
+    }
+    
+    .progress-fill {
+        height: 100%;
+        background-color: #111827;
+        border-radius: 2px;
+        width: 0%;
+        transition: width 0.1s;
+    }
+    
+    .audio-player-actions {
+        display: flex;
+        gap: 8px;
+    }
+    
+    .action-btn {
+        width: 36px;
+        height: 36px;
+        background: none;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 16px;
+    }
+    
+    .action-btn:hover {
+        background-color: #f9fafb;
+        border-color: #d1d5db;
+    }
+    
+    /* Dark mode support */
+    .dark .voice-row {
+        background-color: #1f2937;
+        border-bottom-color: #374151;
+    }
+    
+    .dark .voice-row:hover {
+        background-color: #374151;
+    }
+    
+    .dark .voice-row-title {
+        color: #f9fafb;
+    }
+    
+    .dark .voice-row-description {
+        color: #9ca3af;
+    }
+    
+    .dark .section-title {
+        color: #f9fafb;
+    }
+    
+    .dark .explore-library-btn {
+        background-color: #1f2937;
+        border-color: #374151;
+        color: #d1d5db;
+    }
+    
+    .dark .explore-library-btn:hover {
+        background-color: #374151;
+    }
+    
+    .dark .create-option {
+        background-color: #1f2937;
+        border-color: #374151;
+    }
+    
+    .dark .create-option:hover {
+        background-color: #374151;
+    }
+    
+    .dark .create-option-title {
+        color: #f9fafb;
+    }
+    
+    .dark .create-option-description {
+        color: #9ca3af;
+    }
+    
+    .dark .audio-player {
+        background-color: #1f2937;
+        border-top-color: #374151;
+    }
+    
+    .dark .audio-player-details h4 {
+        color: #f9fafb;
+    }
+    
+    .dark .audio-player-details p {
+        color: #9ca3af;
+    }
+    
+    .dark .play-pause-btn {
+        background-color: #f9fafb;
+        color: #111827;
+    }
+    
+    .dark .play-pause-btn:hover {
+        background-color: white;
+    }
+    
+    .dark .progress-bar {
+        background-color: #374151;
+    }
+    
+    .dark .progress-fill {
+        background-color: #f9fafb;
+    }
+    
+    .dark .action-btn {
+        border-color: #374151;
+    }
+    
+    .dark .action-btn:hover {
+        background-color: #374151;
+    }
+    
+    /* ============================================
        RESPONSIVE DESIGN - BREAKPOINTS
        ============================================ */
     
@@ -412,6 +895,11 @@ def create_modern_ui():
         .features-grid {
             grid-template-columns: repeat(3, 1fr);
             gap: 16px;
+        }
+        
+        .two-column-layout {
+            grid-template-columns: 1fr;
+            gap: 32px;
         }
         
         .content-area {
@@ -425,6 +913,23 @@ def create_modern_ui():
         /* Hide greeting on tablet and below */
         .header-greeting {
             display: none !important;
+        }
+        
+        .two-column-layout {
+            margin-top: 40px;
+        }
+        
+        .audio-player {
+            left: 0;
+            padding: 16px 20px;
+        }
+        
+        .audio-player-content {
+            gap: 16px;
+        }
+        
+        .audio-player-info {
+            min-width: 180px;
         }
     }
     
@@ -469,6 +974,98 @@ def create_modern_ui():
             grid-template-columns: repeat(2, 1fr);
             gap: 12px;
         }
+        
+        /* Two-column layout stacks */
+        .two-column-layout {
+            grid-template-columns: 1fr;
+            gap: 24px;
+            margin-top: 30px;
+        }
+        
+        .section-title {
+            font-size: 18px;
+            margin-bottom: 16px;
+        }
+        
+        .voice-row {
+            padding: 12px;
+        }
+        
+        .voice-row-avatar {
+            width: 40px;
+            height: 40px;
+        }
+        
+        .avatar-emoji {
+            font-size: 20px;
+        }
+        
+        .play-icon {
+            width: 16px;
+            height: 16px;
+            font-size: 8px;
+        }
+        
+        .voice-row-title {
+            font-size: 13px;
+        }
+        
+        .voice-row-description {
+            font-size: 12px;
+        }
+        
+        .create-option {
+            padding: 16px;
+            gap: 12px;
+        }
+        
+        .create-option-icon {
+            width: 48px;
+            height: 48px;
+            font-size: 24px;
+        }
+        
+        .create-option-title {
+            font-size: 14px;
+        }
+        
+        .create-option-description {
+            font-size: 12px;
+        }
+        
+        /* Audio player mobile */
+        .audio-player {
+            left: 0;
+            padding: 12px;
+        }
+        
+        .audio-player-content {
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        
+        .audio-player-info {
+            min-width: 100%;
+        }
+        
+        .audio-player-controls {
+            gap: 8px;
+        }
+        
+        .play-pause-btn {
+            width: 40px;
+            height: 40px;
+            font-size: 16px;
+        }
+        
+        .audio-player-progress {
+            flex: 1 100%;
+            order: 4;
+        }
+        
+        .audio-player-actions {
+            gap: 6px;
+        }
     }
     
     /* Small Mobile: 480px and below */
@@ -510,6 +1107,49 @@ def create_modern_ui():
         
         .content-area {
             padding: 16px 16px !important;
+        }
+        
+        /* Two-column layout extra compact */
+        .two-column-layout {
+            margin-top: 24px;
+            gap: 20px;
+        }
+        
+        .section-title {
+            font-size: 16px;
+            margin-bottom: 12px;
+        }
+        
+        .voice-row {
+            padding: 10px;
+            gap: 12px;
+        }
+        
+        .voice-row-avatar {
+            width: 36px;
+            height: 36px;
+        }
+        
+        .avatar-emoji {
+            font-size: 18px;
+        }
+        
+        .create-option {
+            padding: 14px;
+        }
+        
+        .create-option-icon {
+            width: 44px;
+            height: 44px;
+            font-size: 22px;
+        }
+        
+        .audio-player-close {
+            top: 8px;
+            right: 8px;
+            font-size: 16px;
+            width: 28px;
+            height: 28px;
         }
     }
     
@@ -577,24 +1217,24 @@ def create_modern_ui():
         background-color: #111827;
     }
     """
-    
+
     with gr.Blocks(
-        css=custom_css,
-        title="TTS Studio",
-        theme=gr.themes.Soft()
+            css=custom_css,
+            title="TTS Studio",
+            theme=gr.themes.Soft()
     ) as demo:
-        
+
         with gr.Row(elem_classes=["main-layout"]):
             # Left Sidebar
             with gr.Column(scale=0, elem_classes=["sidebar"], min_width=250):
-                
+
                 # Brand/Logo
                 gr.HTML("""
                 <div class="brand">
                     <h2>🎙️ TTS Studio</h2>
                 </div>
                 """)
-                
+
                 # Main Navigation Section
                 gr.HTML("""
                 <div class="nav-section">
@@ -608,7 +1248,7 @@ def create_modern_ui():
                     </div>
                 </div>
                 """)
-                
+
                 # Playground Section
                 gr.HTML("""
                 <div class="nav-section">
@@ -640,7 +1280,7 @@ def create_modern_ui():
                     </div>
                 </div>
                 """)
-                
+
                 # Products Section
                 gr.HTML("""
                 <div class="nav-section">
@@ -672,7 +1312,7 @@ def create_modern_ui():
                     </div>
                 </div>
                 """)
-                
+
                 # Developers Section
                 gr.HTML("""
                 <div class="nav-section">
@@ -683,7 +1323,7 @@ def create_modern_ui():
                     </div>
                 </div>
                 """)
-                
+
                 # Upgrade Button at bottom
                 gr.HTML("""
                 <div class="upgrade-section">
@@ -693,10 +1333,10 @@ def create_modern_ui():
                     </button>
                 </div>
                 """)
-            
+
             # Main Content Area with Header
             with gr.Column(scale=1, elem_classes=["main-content"]):
-                
+
                 # Header Section
                 gr.HTML("""
                 <div class="header">
@@ -767,10 +1407,10 @@ def create_modern_ui():
                 });
                 </script>
                 """)
-                
+
                 # Content Area
                 with gr.Column(elem_classes=["content-area"]):
-                    
+
                     # Feature Cards Grid
                     gr.HTML("""
                     <div class="features-grid">
@@ -811,7 +1451,182 @@ def create_modern_ui():
                         </div>
                     </div>
                     """)
-    
+
+                    # Two-Column Layout: Voice Library + Create/Clone Options
+                    gr.HTML("""
+                    <div class="two-column-layout">
+                        <!-- LEFT SIDE: Latest from the library -->
+                        <div class="library-column">
+                            <h2 class="section-title">Latest from the library</h2>
+                            
+                            <div class="voice-list">
+                                <!-- Voice Row 1 -->
+                                <div class="voice-row" onclick="openAudioPlayer('Peter', 'Natural, Professional Narrator')">
+                                    <div class="voice-row-avatar">
+                                        <span class="avatar-emoji">👨</span>
+                                        <span class="play-icon">▶️</span>
+                                    </div>
+                                    <div class="voice-row-info">
+                                        <h3 class="voice-row-title">Peter - Natural, Professional Narrator</h3>
+                                        <p class="voice-row-description">Peter - Middle-aged Dutch male with a warm, reliable tone. Perfect for news...</p>
+                                    </div>
+                                </div>
+                                
+                                <!-- Voice Row 2 -->
+                                <div class="voice-row" onclick="openAudioPlayer('Bella', 'Customer Support Agent')">
+                                    <div class="voice-row-avatar">
+                                        <span class="avatar-emoji">👩</span>
+                                        <span class="play-icon">▶️</span>
+                                    </div>
+                                    <div class="voice-row-info">
+                                        <h3 class="voice-row-title">Bella - Customer Support Agent</h3>
+                                        <p class="voice-row-description">Bella Ai - Conversational Dutch female Voice.</p>
+                                    </div>
+                                </div>
+                                
+                                <!-- Voice Row 3 -->
+                                <div class="voice-row" onclick="openAudioPlayer('Wilco', 'Natural and Fast-Paced Narrator')">
+                                    <div class="voice-row-avatar">
+                                        <span class="avatar-emoji">🎙️</span>
+                                        <span class="play-icon">▶️</span>
+                                    </div>
+                                    <div class="voice-row-info">
+                                        <h3 class="voice-row-title">Wilco - Natural and Fast-Paced Narrator</h3>
+                                        <p class="voice-row-description">Wiloco - Voice chaos, the only AI voice that comes out better than the...</p>
+                                    </div>
+                                </div>
+                                
+                                <!-- Voice Row 4 -->
+                                <div class="voice-row" onclick="openAudioPlayer('Hans Claesen', 'Engaging Storyteller')">
+                                    <div class="voice-row-avatar">
+                                        <span class="avatar-emoji">👨‍🦰</span>
+                                        <span class="play-icon">▶️</span>
+                                    </div>
+                                    <div class="voice-row-info">
+                                        <h3 class="voice-row-title">Hans Claesen - Engaging Storyteller</h3>
+                                        <p class="voice-row-description">Hans Claesen - Conversational - Warm and authentic Flemish voice, perfect...</p>
+                                    </div>
+                                </div>
+                                
+                                <!-- Voice Row 5 -->
+                                <div class="voice-row" onclick="openAudioPlayer('Charles', 'Balanced, Calm and Supportive')">
+                                    <div class="voice-row-avatar">
+                                        <span class="avatar-emoji">🧔</span>
+                                        <span class="play-icon">▶️</span>
+                                    </div>
+                                    <div class="voice-row-info">
+                                        <h3 class="voice-row-title">Charles - Balanced, Calm and Supportive</h3>
+                                        <p class="voice-row-description">Charles - Deep "Gents" voice.</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Explore Library Button -->
+                            <button class="explore-library-btn">Explore Library</button>
+                        </div>
+                        
+                        <!-- RIGHT SIDE: Create or clone a voice -->
+                        <div class="create-column">
+                            <h2 class="section-title">Create or clone a voice</h2>
+                            
+                            <div class="create-options">
+                                <!-- Voice Design Option -->
+                                <div class="create-option">
+                                    <div class="create-option-icon voice-design-icon">
+                                        <span>✏️</span>
+                                    </div>
+                                    <div class="create-option-content">
+                                        <h3 class="create-option-title">Voice Design</h3>
+                                        <p class="create-option-description">Design an entirely new voice from a text prompt</p>
+                                    </div>
+                                </div>
+                                
+                                <!-- Clone your Voice Option -->
+                                <div class="create-option">
+                                    <div class="create-option-icon clone-voice-icon">
+                                        <span>🎤</span>
+                                    </div>
+                                    <div class="create-option-content">
+                                        <h3 class="create-option-title">Clone your Voice</h3>
+                                        <p class="create-option-description">Create a realistic digital clone of your voice</p>
+                                    </div>
+                                </div>
+                                
+                                <!-- Voice Collections Option -->
+                                <div class="create-option">
+                                    <div class="create-option-icon collections-icon">
+                                        <span>📁</span>
+                                    </div>
+                                    <div class="create-option-content">
+                                        <h3 class="create-option-title">Voice Collections</h3>
+                                        <p class="create-option-description">Curated AI voices for every use case</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Audio Player Component (Reusable, Hidden by Default) -->
+                    <div id="audioPlayer" class="audio-player hidden">
+                        <button class="audio-player-close" onclick="closeAudioPlayer()">✕</button>
+                        <div class="audio-player-content">
+                            <div class="audio-player-info">
+                                <div class="audio-player-avatar">🎙️</div>
+                                <div class="audio-player-details">
+                                    <h4 id="audioPlayerVoiceName">Wilco - Natural and Fast-Paced Narrator</h4>
+                                    <p>Default voice preview</p>
+                                </div>
+                            </div>
+                            <div class="audio-player-controls">
+                                <button class="control-btn" title="Rewind 10s">
+                                    <span class="rewind-icon">⏮</span>
+                                    <span class="control-label">10</span>
+                                </button>
+                                <button class="control-btn play-pause-btn" title="Play/Pause">
+                                    <span class="play-pause-icon">▶️</span>
+                                </button>
+                                <button class="control-btn" title="Forward 10s">
+                                    <span class="forward-icon">⏭</span>
+                                    <span class="control-label">10</span>
+                                </button>
+                            </div>
+                            <div class="audio-player-progress">
+                                <span class="progress-time">0:00</span>
+                                <div class="progress-bar">
+                                    <div class="progress-fill"></div>
+                                </div>
+                                <span class="progress-time">0:03</span>
+                            </div>
+                            <div class="audio-player-actions">
+                                <button class="action-btn" title="Download">
+                                    ⬇️
+                                </button>
+                                <button class="action-btn" title="Expand">
+                                    ⬆️
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <script>
+                    function openAudioPlayer(voiceName, voiceType) {
+                        const player = document.getElementById('audioPlayer');
+                        const nameEl = document.getElementById('audioPlayerVoiceName');
+                        if (player && nameEl) {
+                            nameEl.textContent = voiceName + ' - ' + voiceType;
+                            player.classList.remove('hidden');
+                        }
+                    }
+                    
+                    function closeAudioPlayer() {
+                        const player = document.getElementById('audioPlayer');
+                        if (player) {
+                            player.classList.add('hidden');
+                        }
+                    }
+                    </script>
+                    """)
+
     return demo
 
 
