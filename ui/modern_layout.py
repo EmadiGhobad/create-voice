@@ -964,6 +964,12 @@ def create_modern_ui():
     /* Mobile: 768px and below */
     @media (max-width: 768px) {
         /* Layout adjustments */
+        .main-layout {
+            height: auto;
+            min-height: 100vh;
+            flex-direction: column;
+        }
+        
         .sidebar {
             position: fixed;
             left: 0;
@@ -982,6 +988,12 @@ def create_modern_ui():
             display: flex !important;
         }
         
+        .main-content {
+            height: auto;
+            min-height: 100vh;
+            overflow-y: visible;
+        }
+        
         /* Header adjustments */
         .header {
             padding: 12px 20px !important;
@@ -995,6 +1007,8 @@ def create_modern_ui():
         /* Content adjustments */
         .content-area {
             padding: 20px 20px !important;
+            height: auto;
+            overflow-y: visible;
         }
         
         /* Feature cards */
