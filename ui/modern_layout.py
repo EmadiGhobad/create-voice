@@ -437,7 +437,7 @@ def create_modern_ui():
     .voice-list {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 16px;
         margin-bottom: 16px;
         width: 100%;
     }
@@ -446,22 +446,25 @@ def create_modern_ui():
         display: flex;
         align-items: center;
         gap: 12px;
-        padding: 12px;
-        background: white;
-        border-radius: 8px;
+        padding: 8px 0;
+        /* COMPLETELY INVISIBLE - no background, no border, no shadow */
+        background: none;
+        border: none;
+        box-shadow: none;
         cursor: pointer;
         transition: all 0.2s;
-        min-height: 70px;
         width: 100%;
         box-sizing: border-box;
     }
     
     .voice-row:hover {
-        background-color: #f9fafb;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+        /* Stay completely invisible on hover */
+        background: none;
+        border: none;
+        box-shadow: none;
     }
     
-    /* LEFT: Square icon box - size is double the row height */
+    /* LEFT: VISIBLE square icon box - the ONLY visible box on left side */
     /* NO TEXT inside this box, only emoji/icon */
     .voice-icon-box {
         position: relative;
@@ -473,6 +476,8 @@ def create_modern_ui():
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
+        /* Ensure visibility */
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     }
     
     .voice-icon {
@@ -556,7 +561,7 @@ def create_modern_ui():
     .create-options {
         display: flex;
         flex-direction: column;
-        gap: 16px;
+        gap: 24px;
         width: 100%;
     }
     
@@ -564,10 +569,11 @@ def create_modern_ui():
         display: flex;
         align-items: center;
         gap: 20px;
-        padding: 24px;
-        background: #f9fafb;
-        border: 1px solid #e5e7eb;
-        border-radius: 12px;
+        padding: 16px 0;
+        /* COMPLETELY INVISIBLE - no background, no border, no shadow */
+        background: none;
+        border: none;
+        box-shadow: none;
         cursor: pointer;
         transition: all 0.2s;
         width: 100%;
@@ -575,10 +581,10 @@ def create_modern_ui():
     }
     
     .create-option:hover {
-        background-color: white;
-        border-color: #d1d5db;
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        /* Stay completely invisible on hover */
+        background: none;
+        border: none;
+        box-shadow: none;
     }
     
     .create-option-icon {
@@ -812,11 +818,15 @@ def create_modern_ui():
     
     /* Dark mode support */
     .dark .voice-row {
-        background-color: #1f2937;
+        background: none;
+        border: none;
+        box-shadow: none;
     }
     
     .dark .voice-row:hover {
-        background-color: #374151;
+        background: none;
+        border: none;
+        box-shadow: none;
     }
     
     .dark .voice-title {
@@ -847,12 +857,15 @@ def create_modern_ui():
     }
     
     .dark .create-option {
-        background-color: #1f2937;
-        border-color: #374151;
+        background: none;
+        border: none;
+        box-shadow: none;
     }
     
     .dark .create-option:hover {
-        background-color: #374151;
+        background: none;
+        border: none;
+        box-shadow: none;
     }
     
     .dark .create-option-title {
@@ -1003,9 +1016,8 @@ def create_modern_ui():
         }
         
         .voice-row {
-            padding: 10px;
+            padding: 6px 0;
             gap: 10px;
-            min-height: 60px;
         }
         
         .voice-icon-box {
@@ -1140,9 +1152,8 @@ def create_modern_ui():
         }
         
         .voice-row {
-            padding: 8px;
+            padding: 4px 0;
             gap: 8px;
-            min-height: 50px;
         }
         
         .voice-icon-box {
