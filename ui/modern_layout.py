@@ -19,8 +19,53 @@ def create_modern_ui():
     - Settings/theme toggle
     """
 
-    # Custom CSS for layout and navigation
+    # Custom CSS - Modular & Polished Design
     custom_css = """
+    /* ============================================
+       MODERN TTS STUDIO - MODULAR CSS
+       Typography: Inter Font | Rounded Icons | CSS Variables
+       ============================================ */
+    
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    
+    :root {
+        --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        
+        /* Color Palette */
+        --color-primary: #667eea;
+        --color-primary-dark: #5568d3;
+        --color-bg-light: #ffffff;
+        --color-bg-gray: #f9fafb;
+        --color-border: #e5e7eb;
+        --color-text-primary: #111827;
+        --color-text-secondary: #6b7280;
+        
+        /* Icon Colors */
+        --color-icon-orange: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+        --color-icon-red: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        --color-icon-green: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        --color-icon-blue: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        
+        /* Spacing */
+        --spacing-xs: 4px;
+        --spacing-sm: 8px;
+        --spacing-md: 16px;
+        --spacing-lg: 24px;
+        --spacing-xl: 40px;
+        
+        /* Border Radius - ROUNDED */
+        --radius-sm: 8px;
+        --radius-md: 12px;
+        --radius-lg: 16px;
+        --radius-full: 50%;
+    }
+    
+    body {
+        font-family: var(--font-primary);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+    }
+    
     /* ============================================
        BASE STYLES & RESET
        ============================================ */
@@ -39,6 +84,7 @@ def create_modern_ui():
         height: 100vh;
         margin: 0;
         padding: 0;
+        font-family: var(--font-primary);
     }
     
     /* Mobile Menu Toggle */
@@ -416,10 +462,11 @@ def create_modern_ui():
     }
     
     .section-title {
-        font-size: 20px;
-        font-weight: 600;
-        color: #111827;
-        margin: 0 0 24px 0;
+        font-size: 22px;
+        font-weight: 700;
+        color: var(--color-text-primary);
+        margin: 0 0 var(--spacing-lg) 0;
+        letter-spacing: -0.5px;
     }
     
     /* ============================================
@@ -464,24 +511,30 @@ def create_modern_ui():
         box-shadow: none;
     }
     
-    /* LEFT: VISIBLE square icon box - the ONLY visible box on left side */
+    /* Voice Icon Box - ROUNDED & POLISHED */
     /* NO TEXT inside this box, only emoji/icon */
     .voice-icon-box {
         position: relative;
         width: 60px;
         height: 60px;
-        background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
-        border-radius: 8px;
+        background: var(--color-icon-orange);
+        border-radius: var(--radius-lg);
         display: flex;
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
-        /* Ensure visibility */
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 2px 8px rgba(249, 115, 22, 0.25);
+        transition: all 0.3s ease;
+    }
+    
+    .voice-row:hover .voice-icon-box {
+        transform: scale(1.05);
+        box-shadow: 0 4px 12px rgba(249, 115, 22, 0.35);
     }
     
     .voice-icon {
         font-size: 32px;
+        filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
     }
     
     .play-badge {
@@ -489,61 +542,66 @@ def create_modern_ui():
         bottom: -4px;
         left: -4px;
         background: white;
-        width: 20px;
-        height: 20px;
-        border-radius: 50%;
+        width: 22px;
+        height: 22px;
+        border-radius: var(--radius-full);
         display: flex;
         align-items: center;
         justify-content: center;
         font-size: 10px;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+        border: 2px solid white;
     }
     
-    /* RIGHT: Two lines of text (title + description) */
+    /* Voice Info Text */
     .voice-info {
         flex: 1;
         min-width: 0;
         display: flex;
         flex-direction: column;
-        gap: 2px;
+        gap: 4px;
     }
     
-    /* Smaller fonts - 2 sizes less */
     .voice-title {
-        font-size: 13px;
+        font-size: 14px;
         font-weight: 600;
-        color: #111827;
+        color: var(--color-text-primary);
         margin: 0;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        letter-spacing: -0.2px;
     }
     
     .voice-description {
-        font-size: 12px;
-        color: #6b7280;
+        font-size: 13px;
+        color: var(--color-text-secondary);
         margin: 0;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        line-height: 1.4;
     }
     
     .explore-library-btn {
         padding: 10px 20px;
-        background-color: white;
-        border: 1px solid #e5e7eb;
-        border-radius: 8px;
+        background-color: var(--color-bg-light);
+        border: 1.5px solid var(--color-border);
+        border-radius: var(--radius-sm);
         font-size: 14px;
-        font-weight: 500;
-        color: #374151;
+        font-weight: 600;
+        color: var(--color-text-primary);
         cursor: pointer;
         transition: all 0.2s;
         align-self: flex-start;
+        font-family: var(--font-primary);
     }
     
     .explore-library-btn:hover {
-        background-color: #f9fafb;
-        border-color: #d1d5db;
+        background-color: var(--color-bg-gray);
+        border-color: var(--color-text-secondary);
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
     }
     
     /* ============================================
@@ -587,27 +645,37 @@ def create_modern_ui():
         box-shadow: none;
     }
     
+    /* Create Option Icon Boxes - ROUNDED & POLISHED */
     .create-option-icon {
-        width: 56px;
-        height: 56px;
-        border-radius: 12px;
+        width: 64px;
+        height: 64px;
+        border-radius: var(--radius-lg);
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 28px;
+        font-size: 32px;
         flex-shrink: 0;
+        transition: all 0.3s ease;
+    }
+    
+    .create-option:hover .create-option-icon {
+        transform: scale(1.05);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     }
     
     .voice-design-icon {
-        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        background: var(--color-icon-red);
+        box-shadow: 0 2px 8px rgba(239, 68, 68, 0.25);
     }
     
     .clone-voice-icon {
-        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        background: var(--color-icon-green);
+        box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
     }
     
     .collections-icon {
-        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        background: var(--color-icon-blue);
+        box-shadow: 0 2px 8px rgba(59, 130, 246, 0.25);
     }
     
     .create-option-content {
@@ -615,15 +683,16 @@ def create_modern_ui():
     }
     
     .create-option-title {
-        font-size: 16px;
+        font-size: 17px;
         font-weight: 600;
-        color: #111827;
+        color: var(--color-text-primary);
         margin: 0 0 4px 0;
+        letter-spacing: -0.3px;
     }
     
     .create-option-description {
-        font-size: 13px;
-        color: #6b7280;
+        font-size: 14px;
+        color: var(--color-text-secondary);
         margin: 0;
         line-height: 1.5;
     }
