@@ -26,8 +26,6 @@ def create_modern_ui():
        Typography: Inter Font | Rounded Icons | CSS Variables
        ============================================ */
     
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-    
     :root {
         --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
         
@@ -275,11 +273,16 @@ def create_modern_ui():
         font-size: 18px;
         font-weight: 600;
         margin: 0;
-        color: #1f2937;
+        color: #1f2937 !important;
         display: flex;
         align-items: center;
         gap: 8px;
         line-height: 1.3;
+    }
+    
+    /* Ensure sidebar text is visible in light mode */
+    .gradio-container .sidebar .brand h2 {
+        color: #1f2937 !important;
     }
     
     /* ============================================
@@ -310,9 +313,42 @@ def create_modern_ui():
         border-radius: 6px;
         cursor: pointer;
         transition: all 0.2s;
-        color: #4b5563;
+        color: #4b5563 !important;
         font-size: 14px;
         text-decoration: none;
+    }
+    
+    /* Ensure nav items are visible in light mode - Maximum Specificity */
+    .gradio-container .contain .sidebar .nav-item,
+    .gradio-container .sidebar .nav-item,
+    .sidebar .nav-item {
+        color: #4b5563 !important;
+    }
+    
+    .gradio-container .contain .sidebar .nav-item span,
+    .gradio-container .sidebar .nav-item span,
+    .sidebar .nav-item span {
+        color: #4b5563 !important;
+    }
+    
+    .gradio-container .contain .sidebar .nav-item:hover,
+    .gradio-container .sidebar .nav-item:hover,
+    .sidebar .nav-item:hover {
+        background-color: #f3f4f6 !important;
+        color: #111827 !important;
+    }
+    
+    .gradio-container .contain .sidebar .nav-item.active,
+    .gradio-container .sidebar .nav-item.active,
+    .sidebar .nav-item.active {
+        background-color: #e0e7ff !important;
+        color: #667eea !important;
+    }
+    
+    .gradio-container .contain .sidebar .nav-section-title,
+    .gradio-container .sidebar .nav-section-title,
+    .sidebar .nav-section-title {
+        color: #9ca3af !important;
     }
     
     .nav-item:hover {
@@ -378,64 +414,160 @@ def create_modern_ui():
        DARK MODE THEME
        ============================================ */
     
-    .dark .sidebar {
-        background-color: #1f2937;
-        border-right-color: #374151;
+    /* Dark Mode - Maximum Specificity to Override Gradio */
+    .gradio-container .row.main-layout.dark .sidebar,
+    .gradio-container div.main-layout.dark .sidebar,
+    .row.main-layout.dark > .sidebar,
+    div.main-layout.dark > .sidebar {
+        background-color: #1f2937 !important;
+        border-right-color: #374151 !important;
     }
     
-    .dark .main-content {
-        background-color: #111827;
+    .gradio-container .row.main-layout.dark .main-content,
+    .gradio-container div.main-layout.dark .main-content,
+    .row.main-layout.dark > .main-content,
+    div.main-layout.dark > .main-content {
+        background-color: #111827 !important;
     }
     
-    .dark .header {
-        background-color: #1f2937;
-        border-bottom-color: #374151;
+    .gradio-container .row.main-layout.dark .header,
+    .gradio-container div.main-layout.dark .header,
+    .row.main-layout.dark .header,
+    div.main-layout.dark .header {
+        background-color: #1f2937 !important;
+        border-bottom-color: #374151 !important;
     }
     
-    .dark .header-greeting h1 {
-        color: #f9fafb;
+    .gradio-container .main-layout.dark .header-greeting h1 {
+        color: #f9fafb !important;
     }
     
-    .dark .search-box {
-        background-color: #374151;
+    .gradio-container .main-layout.dark .header-greeting p {
+        color: #9ca3af !important;
     }
     
-    .dark .search-box input {
-        color: #f9fafb;
+    .gradio-container .main-layout.dark .search-box {
+        background-color: #374151 !important;
     }
     
-    .dark .header-btn {
-        background-color: #1f2937;
-        border-color: #374151;
+    .gradio-container .main-layout.dark .search-box input {
+        color: #f9fafb !important;
     }
     
-    .dark .header-btn:hover {
-        background-color: #374151;
+    .gradio-container .main-layout.dark .header-btn {
+        background-color: #1f2937 !important;
+        border-color: #374151 !important;
     }
     
-    .dark .content-area {
-        background-color: #111827;
+    .gradio-container .main-layout.dark .header-btn:hover {
+        background-color: #374151 !important;
     }
     
-    .dark .brand {
-        border-bottom-color: #374151;
+    .gradio-container .main-layout.dark .content-area {
+        background-color: #111827 !important;
     }
     
-    .dark .brand h2 {
-        color: #f9fafb;
+    .gradio-container .main-layout.dark .brand {
+        border-bottom-color: #374151 !important;
     }
     
-    .dark .nav-item {
-        color: #d1d5db;
+    .gradio-container .main-layout.dark .brand h2 {
+        color: #f9fafb !important;
     }
     
-    .dark .nav-item:hover {
-        background-color: #374151;
-        color: #f9fafb;
+    .gradio-container .main-layout.dark .nav-item {
+        color: #9ca3af !important;
     }
     
-    .dark .upgrade-section {
-        border-top-color: #374151;
+    .gradio-container .main-layout.dark .nav-item:hover {
+        background-color: #374151 !important;
+        color: #f9fafb !important;
+    }
+    
+    .gradio-container .main-layout.dark .nav-item.active {
+        background-color: rgba(102, 126, 234, 0.2) !important;
+        color: #667eea !important;
+    }
+    
+    .gradio-container .main-layout.dark .upgrade-section {
+        border-top-color: #374151 !important;
+    }
+    
+    .gradio-container .main-layout.dark .section-title {
+        color: #f9fafb !important;
+    }
+    
+    .gradio-container .main-layout.dark .voice-row {
+        background: transparent !important;
+    }
+    
+    .gradio-container .main-layout.dark .voice-row:hover {
+        background: transparent !important;
+    }
+    
+    .gradio-container .main-layout.dark .voice-title {
+        color: #f9fafb !important;
+    }
+    
+    .gradio-container .main-layout.dark .voice-description {
+        color: #9ca3af !important;
+    }
+    
+    .gradio-container .main-layout.dark .create-option {
+        background: transparent !important;
+    }
+    
+    .gradio-container .main-layout.dark .create-option-title {
+        color: #f9fafb !important;
+    }
+    
+    .gradio-container .main-layout.dark .create-option-description {
+        color: #9ca3af !important;
+    }
+    
+    .gradio-container .main-layout.dark .explore-library-btn {
+        background-color: #1f2937 !important;
+        border-color: #374151 !important;
+        color: #f9fafb !important;
+    }
+    
+    .gradio-container .main-layout.dark .explore-library-btn:hover {
+        background-color: #374151 !important;
+    }
+    
+    .gradio-container .main-layout.dark .feature-card-box {
+        background-color: #1f2937 !important;
+        border-color: #374151 !important;
+    }
+    
+    .gradio-container .main-layout.dark .feature-card-title {
+        color: #f9fafb !important;
+    }
+    
+    .gradio-container .main-layout.dark .audio-player {
+        background-color: #1f2937 !important;
+        border-color: #374151 !important;
+    }
+    
+    .gradio-container .main-layout.dark .audio-player-details h4 {
+        color: #f9fafb !important;
+    }
+    
+    .gradio-container .main-layout.dark .audio-player-details p {
+        color: #9ca3af !important;
+    }
+    
+    .gradio-container .main-layout.dark .progress-bar {
+        background-color: #374151 !important;
+    }
+    
+    .gradio-container .main-layout.dark .play-pause-btn {
+        background-color: #f9fafb !important;
+        color: #111827 !important;
+    }
+    
+    .gradio-container .main-layout.dark .nav-section-title {
+        color: #9ca3af !important;
     }
     
     /* ============================================
@@ -899,26 +1031,26 @@ def create_modern_ui():
     }
     
     .dark .voice-title {
-        color: #f9fafb;
+        color: var(--color-text-primary);
     }
     
     .dark .voice-description {
-        color: #9ca3af;
+        color: var(--color-text-secondary);
     }
     
     .dark .play-badge {
-        background: #111827;
+        background: var(--color-bg-light);
         color: white;
     }
     
     .dark .section-title {
-        color: #f9fafb;
+        color: var(--color-text-primary);
     }
     
     .dark .explore-library-btn {
-        background-color: #1f2937;
-        border-color: #374151;
-        color: #d1d5db;
+        background-color: var(--color-bg-gray);
+        border-color: var(--color-border);
+        color: var(--color-text-primary);
     }
     
     .dark .explore-library-btn:hover {
@@ -938,24 +1070,28 @@ def create_modern_ui():
     }
     
     .dark .create-option-title {
-        color: #f9fafb;
+        color: var(--color-text-primary);
     }
     
     .dark .create-option-description {
-        color: #9ca3af;
+        color: var(--color-text-secondary);
     }
     
     .dark .audio-player {
-        background-color: #1f2937;
-        border-top-color: #374151;
+        background-color: var(--color-bg-gray);
+        border-top-color: var(--color-border);
     }
     
     .dark .audio-player-details h4 {
-        color: #f9fafb;
+        color: var(--color-text-primary);
     }
     
     .dark .audio-player-details p {
-        color: #9ca3af;
+        color: var(--color-text-secondary);
+    }
+    
+    .dark .audio-player-close:hover {
+        background-color: #374151;
     }
     
     .dark .play-pause-btn {
@@ -972,15 +1108,20 @@ def create_modern_ui():
     }
     
     .dark .progress-fill {
-        background-color: #f9fafb;
+        background-color: var(--color-text-primary);
     }
     
     .dark .action-btn {
-        border-color: #374151;
+        border-color: var(--color-border);
     }
     
     .dark .action-btn:hover {
         background-color: #374151;
+    }
+    
+    .dark .user-avatar {
+        background-color: var(--color-primary);
+        color: white;
     }
     
     /* ============================================
@@ -1292,30 +1433,36 @@ def create_modern_ui():
     .feature-card-box {
         width: 100%;
         aspect-ratio: 1;
-        background: #f9fafb;
-        border: 1px solid #e5e7eb;
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border: 1.5px solid #d1d5db;
         border-radius: 12px;
         display: flex;
         align-items: center;
         justify-content: center;
         font-size: 48px;
         transition: all 0.2s;
-        background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
     }
     
     .feature-card:hover .feature-card-box {
         transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-        border-color: #d1d5db;
-        background: #ffffff;
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+        border-color: #667eea;
+        background: linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%);
     }
     
     .feature-card-title {
         font-size: 14px;
-        font-weight: 500;
-        color: #1f2937;
+        font-weight: 600;
+        color: #111827 !important;
         margin: 0;
         text-align: center;
+    }
+    
+    /* Ensure feature card titles are visible in light mode */
+    .gradio-container .feature-card-title,
+    .gradio-container .main-layout .feature-card-title {
+        color: #111827 !important;
     }
     
     .feature-card-description {
@@ -1326,23 +1473,33 @@ def create_modern_ui():
         display: none;
     }
     
-    /* Dark mode for feature cards */
-    .dark .feature-card-box {
-        background: linear-gradient(135deg, #374151 0%, #1f2937 100%);
-        border-color: #374151;
+    /* Additional Dark Mode Styles (duplicates for specificity) */
+    .gradio-container .main-layout.dark .feature-card-box {
+        background: #1f2937 !important;
+        border-color: #374151 !important;
     }
     
-    .dark .feature-card:hover .feature-card-box {
-        background: #374151;
-        border-color: #4b5563;
+    .gradio-container .main-layout.dark .feature-card:hover .feature-card-box {
+        background: #374151 !important;
+        border-color: #4b5563 !important;
     }
     
-    .dark .feature-card-title {
-        color: #f9fafb;
+    .gradio-container .main-layout.dark .feature-card-title {
+        color: #f9fafb !important;
     }
     
-    .dark .content-area {
-        background-color: #111827;
+    .gradio-container .main-layout.dark .content-area {
+        background-color: #111827 !important;
+    }
+    
+    /* Dark mode for voice and create option content */
+    .gradio-container .main-layout.dark .two-column-layout {
+        color: #f9fafb !important;
+    }
+    
+    .gradio-container .main-layout.dark .library-column,
+    .gradio-container .main-layout.dark .create-column {
+        background-color: transparent !important;
     }
     """
     
@@ -1355,6 +1512,13 @@ def create_modern_ui():
         with gr.Row(elem_classes=["main-layout"]):
             # Left Sidebar
             with gr.Column(scale=0, elem_classes=["sidebar"], min_width=250):
+
+                # Load Google Font (must be in HTML, not CSS @import)
+                gr.HTML("""
+                <link rel="preconnect" href="https://fonts.googleapis.com">
+                <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+                <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+                """)
 
                 # Brand/Logo
                 gr.HTML("""
@@ -1470,7 +1634,7 @@ def create_modern_ui():
                 <div class="header">
                     <div class="header-left">
                         <!-- Mobile Menu Button -->
-                        <button class="mobile-menu-btn" onclick="toggleMobileSidebar()">
+                        <button class="mobile-menu-btn">
                             ☰
                         </button>
                         
@@ -1503,8 +1667,8 @@ def create_modern_ui():
                             ⚙️
                         </button>
                         
-                        <button class="header-btn" title="Theme Toggle">
-                            🌙
+                        <button id="themeToggle" class="header-btn" title="Toggle Dark Mode">
+                            <span id="themeIcon">🌙</span>
                         </button>
                         
                         <!-- User Avatar -->
@@ -1513,29 +1677,8 @@ def create_modern_ui():
                         </div>
                     </div>
                 </div>
-                
-                <script>
-                function toggleMobileSidebar() {
-                    const sidebar = document.querySelector('.sidebar');
-                    if (sidebar) {
-                        sidebar.classList.toggle('open');
-                    }
-                }
-                
-                // Close sidebar when clicking outside on mobile
-                document.addEventListener('click', function(event) {
-                    const sidebar = document.querySelector('.sidebar');
-                    const menuBtn = document.querySelector('.mobile-menu-btn');
-                    
-                    if (sidebar && sidebar.classList.contains('open')) {
-                        if (!sidebar.contains(event.target) && !menuBtn.contains(event.target)) {
-                            sidebar.classList.remove('open');
-                        }
-                    }
-                });
-                </script>
                 """)
-
+                
                 # Content Area
                 with gr.Column(elem_classes=["content-area"]):
 
@@ -1589,7 +1732,7 @@ def create_modern_ui():
                             
                             <div class="voice-list">
                                 <!-- Voice Row 1 -->
-                                <div class="voice-row" onclick="openAudioPlayer('Peter', 'Natural, Professional Narrator')">
+                                <div class="voice-row" data-voice-name="Peter" data-voice-type="Natural, Professional Narrator">
                                     <div class="voice-icon-box">
                                         <span class="voice-icon">👨</span>
                                         <span class="play-badge">▶️</span>
@@ -1601,7 +1744,7 @@ def create_modern_ui():
                                 </div>
                                 
                                 <!-- Voice Row 2 -->
-                                <div class="voice-row" onclick="openAudioPlayer('Bella', 'Customer Support Agent')">
+                                <div class="voice-row" data-voice-name="Bella" data-voice-type="Customer Support Agent">
                                     <div class="voice-icon-box">
                                         <span class="voice-icon">👩</span>
                                         <span class="play-badge">▶️</span>
@@ -1613,7 +1756,7 @@ def create_modern_ui():
                                 </div>
                                 
                                 <!-- Voice Row 3 -->
-                                <div class="voice-row" onclick="openAudioPlayer('Wilco', 'Natural and Fast-Paced Narrator')">
+                                <div class="voice-row" data-voice-name="Wilco" data-voice-type="Natural and Fast-Paced Narrator">
                                     <div class="voice-icon-box">
                                         <span class="voice-icon">🎙️</span>
                                         <span class="play-badge">▶️</span>
@@ -1625,7 +1768,7 @@ def create_modern_ui():
                                 </div>
                                 
                                 <!-- Voice Row 4 -->
-                                <div class="voice-row" onclick="openAudioPlayer('Hans Claesen', 'Engaging Storyteller')">
+                                <div class="voice-row" data-voice-name="Hans Claesen" data-voice-type="Engaging Storyteller">
                                     <div class="voice-icon-box">
                                         <span class="voice-icon">👨‍🦰</span>
                                         <span class="play-badge">▶️</span>
@@ -1637,7 +1780,7 @@ def create_modern_ui():
                                 </div>
                                 
                                 <!-- Voice Row 5 -->
-                                <div class="voice-row" onclick="openAudioPlayer('Charles', 'Balanced, Calm and Supportive')">
+                                <div class="voice-row" data-voice-name="Charles" data-voice-type="Balanced, Calm and Supportive">
                                     <div class="voice-icon-box">
                                         <span class="voice-icon">🧔</span>
                                         <span class="play-badge">▶️</span>
@@ -1696,7 +1839,7 @@ def create_modern_ui():
                     
                     <!-- Audio Player Component (Reusable, Hidden by Default) -->
                     <div id="audioPlayer" class="audio-player hidden">
-                        <button class="audio-player-close" onclick="closeAudioPlayer()">✕</button>
+                        <button class="audio-player-close">✕</button>
                         <div class="audio-player-content">
                             <div class="audio-player-info">
                                 <div class="audio-player-avatar">🎙️</div>
@@ -1735,25 +1878,114 @@ def create_modern_ui():
                             </div>
                         </div>
                     </div>
+                    """)
+        
+        # Add JavaScript for interactivity at the end
+        demo.load(None, None, None, js="""
+        function() {
+            // Mobile Sidebar Toggle
+            setTimeout(function() {
+                const mobileMenuBtn = document.querySelector('.mobile-menu-btn');
+                if (mobileMenuBtn && !mobileMenuBtn.hasAttribute('data-listener')) {
+                    mobileMenuBtn.setAttribute('data-listener', 'true');
+                    mobileMenuBtn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        const sidebar = document.querySelector('.sidebar');
+                        if (sidebar) {
+                            sidebar.classList.toggle('open');
+                        }
+                    });
+                }
+                
+                // Close sidebar when clicking outside on mobile
+                document.addEventListener('click', function(event) {
+                    const sidebar = document.querySelector('.sidebar');
+                    const menuBtn = document.querySelector('.mobile-menu-btn');
                     
-                    <script>
-                    function openAudioPlayer(voiceName, voiceType) {
-                        const player = document.getElementById('audioPlayer');
-                        const nameEl = document.getElementById('audioPlayerVoiceName');
-                        if (player && nameEl) {
-                            nameEl.textContent = voiceName + ' - ' + voiceType;
-                            player.classList.remove('hidden');
+                    if (sidebar && sidebar.classList.contains('open')) {
+                        if (!sidebar.contains(event.target) && menuBtn && !menuBtn.contains(event.target)) {
+                            sidebar.classList.remove('open');
                         }
                     }
-                    
-                    function closeAudioPlayer() {
+                });
+                
+                // Dark Mode Toggle
+                const themeToggleBtn = document.getElementById('themeToggle');
+                if (themeToggleBtn && !themeToggleBtn.hasAttribute('data-listener')) {
+                    themeToggleBtn.setAttribute('data-listener', 'true');
+                    themeToggleBtn.addEventListener('click', function() {
+                        const mainLayout = document.querySelector('.main-layout');
+                        const themeIcon = document.getElementById('themeIcon');
+                        
+                        console.log('Dark mode toggle clicked');
+                        console.log('mainLayout element:', mainLayout);
+                        console.log('mainLayout classes before:', mainLayout ? mainLayout.className : 'not found');
+                        
+                        if (mainLayout) {
+                            mainLayout.classList.toggle('dark');
+                            console.log('mainLayout classes after:', mainLayout.className);
+                            console.log('Has dark class:', mainLayout.classList.contains('dark'));
+                            
+                            if (mainLayout.classList.contains('dark')) {
+                                if (themeIcon) themeIcon.textContent = '☀️';
+                                localStorage.setItem('theme', 'dark');
+                                console.log('Dark mode activated');
+                            } else {
+                                if (themeIcon) themeIcon.textContent = '🌙';
+                                localStorage.setItem('theme', 'light');
+                                console.log('Light mode activated');
+                            }
+                        } else {
+                            console.error('mainLayout element not found!');
+                        }
+                    });
+                }
+                
+                // Audio Player - Close button
+                const audioCloseBtn = document.querySelector('.audio-player-close');
+                if (audioCloseBtn && !audioCloseBtn.hasAttribute('data-listener')) {
+                    audioCloseBtn.setAttribute('data-listener', 'true');
+                    audioCloseBtn.addEventListener('click', function() {
                         const player = document.getElementById('audioPlayer');
                         if (player) {
                             player.classList.add('hidden');
                         }
+                    });
+                }
+                
+                // Audio Player - Voice rows
+                const voiceRows = document.querySelectorAll('.voice-row');
+                voiceRows.forEach(function(row) {
+                    if (!row.hasAttribute('data-listener')) {
+                        row.setAttribute('data-listener', 'true');
+                        row.addEventListener('click', function() {
+                            const voiceName = this.getAttribute('data-voice-name') || 'Unknown Voice';
+                            const voiceType = this.getAttribute('data-voice-type') || 'Voice Preview';
+                            const player = document.getElementById('audioPlayer');
+                            const nameEl = document.getElementById('audioPlayerVoiceName');
+                            
+                            if (player && nameEl) {
+                                nameEl.textContent = voiceName + ' - ' + voiceType;
+                                player.classList.remove('hidden');
+                            }
+                        });
                     }
-                    </script>
-                    """)
+                });
+                
+                // Load saved theme preference
+                const savedTheme = localStorage.getItem('theme');
+                const mainLayout = document.querySelector('.main-layout');
+                const themeIcon = document.getElementById('themeIcon');
+                
+                if (savedTheme === 'dark' && mainLayout) {
+                    mainLayout.classList.add('dark');
+                    if (themeIcon) {
+                        themeIcon.textContent = '☀️';
+                    }
+                }
+            }, 100);
+        }
+        """)
     
     return demo
 
