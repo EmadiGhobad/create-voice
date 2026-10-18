@@ -1,669 +1,329 @@
 # StyleTTS2 Local Setup
 
-This repository contains scripts to run StyleTTS2 inference locally on macOS, based on the [Inference_LibriTTS.ipynb](https://github.com/yl4579/StyleTTS2/blob/main/Demo/Inference_LibriTTS.ipynb) notebook.
+Config-driven text-to-speech with [StyleTTS2](https://github.com/yl4579/StyleTTS2) on macOS. You describe the text, the reference voice(s) and the synthesis settings in a JSON file, and `inference_local.py` turns it into a WAV, scores it, and saves everything needed to reproduce it.
+
+Based on the [Inference_LibriTTS.ipynb](https://github.com/yl4579/StyleTTS2/blob/main/Demo/Inference_LibriTTS.ipynb) notebook.
 
 ## Prerequisites
 
 - macOS (tested on macOS 12+)
 - Python 3.8 or higher
-- Homebrew (for installing espeak-ng)
+- Homebrew (for espeak / espeak-ng)
 - Git
+- ffmpeg (only for `get-wav-sample.sh`)
 
-## Setup Instructions
+## Setup
 
-### 1. Install System Dependencies
-
-First, make sure you have Homebrew installed. If not, install it from [https://brew.sh](https://brew.sh).
-
-### 2. Run Setup Script
-
-Run the setup script to clone StyleTTS2 and install dependencies:
+### 1. Run the setup script
 
 ```bash
 chmod +x setup.sh
 ./setup.sh
 ```
 
-This will:
-- Clone the StyleTTS2 repository
-- Install espeak-ng via Homebrew
-- Install Python dependencies
-- Download NLTK data
-- Create necessary directories
+This clones StyleTTS2 into `StyleTTS2/`, installs espeak-ng and the Python dependencies, and downloads NLTK data.
 
-### 3. Download Reference Audio
+> `monotonic_align` must be installed separately:
+> `pip install git+https://github.com/resemble-ai/monotonic_align.git`
 
-Download the reference audio files:
+### 2. Patch StyleTTS2 for PyTorch 2.6+
+
+`StyleTTS2/` is a separate clone and is git-ignored here, so this fix is **not** in this repo and must be applied after every fresh clone. PyTorch 2.6+ defaults `torch.load` to `weights_only=True`, which fails on the StyleTTS2 checkpoints. Add `weights_only=False` to the three `torch.load` calls in `StyleTTS2/models.py` (`load_F0_models`, `load_ASR_models`, `load_checkpoint`):
 
 ```bash
-cd StyleTTS2/Demo
-mkdir -p reference_audio
-cd reference_audio
-curl -L https://huggingface.co/yl4579/StyleTTS2-LibriTTS/resolve/main/reference_audio.zip -o reference_audio.zip
-unzip reference_audio.zip
-# Move files from nested directory if needed
-if [ -d reference_audio ]; then
-    mv reference_audio/* . && rmdir reference_audio
-fi
-rm reference_audio.zip
-cd ../../..
+sed -i '' "s/map_location='cpu')/map_location='cpu', weights_only=False)/g" StyleTTS2/models.py
 ```
 
-### 4. Download Model Checkpoint
+Check that all three calls were changed:
 
-The model checkpoint will be automatically downloaded when you run the setup script. If you need to download it manually, you can use:
+```bash
+grep -n "torch.load" StyleTTS2/models.py
+```
+
+### 3. Download the model checkpoint
 
 ```bash
 python -c "from huggingface_hub import hf_hub_download; import os; os.makedirs('StyleTTS2/Models/LibriTTS', exist_ok=True); hf_hub_download(repo_id='yl4579/StyleTTS2-LibriTTS', filename='Models/LibriTTS/epochs_2nd_00020.pth', local_dir='StyleTTS2')"
 ```
 
-The model should be placed at:
+The script expects these two files:
 
 ```
+StyleTTS2/Models/LibriTTS/config.yml
 StyleTTS2/Models/LibriTTS/epochs_2nd_00020.pth
 ```
 
-### 5. Fix Model Loading Issue
+### 4. (Optional) Download the demo reference audio
 
-According to the notebook comments, you need to modify the model loading code. In `StyleTTS2/Models/models.py` around line 604, change:
-
-```python
-params = torch.load(model_path, map_location='cpu', weights_only=False)['model']
-```
-
-This is already handled in the `inference_local.py` script.
-
-## Usage
-
-### Basic Usage
-
-Run the inference script with default settings. This command will:
-1. Load the StyleTTS2 models (takes ~30 seconds on first run)
-2. Use the first available reference audio file from `StyleTTS2/Demo/reference_audio/`
-3. Synthesize the default test sentence: "Hello, this is a test of StyleTTS2 text to speech synthesis."
-4. Save the output to `output.wav` in the current directory
+Only needed if you want the LibriTTS demo speakers (Gavin, Nima, `amused.wav`, …) or `list_speakers.py`:
 
 ```bash
-# Run with default settings - uses first reference audio, default text, saves to output.wav
-DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" python inference_local.py
+cd StyleTTS2/Demo
+mkdir -p reference_audio && cd reference_audio
+curl -L https://huggingface.co/yl4579/StyleTTS2-LibriTTS/resolve/main/reference_audio.zip -o reference_audio.zip
+unzip reference_audio.zip
+if [ -d reference_audio ]; then mv reference_audio/* . && rmdir reference_audio; fi
+rm reference_audio.zip
+cd ../../..
 ```
 
-**Note:** The `DYLD_LIBRARY_PATH` environment variable is required for phonemizer to find the espeak library. You can add this to your shell profile (`.zshrc` or `.bash_profile`) to avoid typing it each time:
+### espeak library path
+
+`inference_local.py` adds `/opt/homebrew/bin` to `PATH` and `/opt/homebrew/Cellar/espeak/1.48.04_1/lib` to `DYLD_LIBRARY_PATH` itself, so you no longer need to prefix commands with `DYLD_LIBRARY_PATH=...`. If your espeak is installed somewhere else, update `espeak_lib_path` at the top of the script.
+
+## Quick start
 
 ```bash
-export DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH"
+python inference_local.py --config input/config.json --output-path input/generated
 ```
 
-### Command-Line Options
+Both arguments are required:
 
-The script supports various command-line arguments for customization:
+| Argument | Description |
+|---|---|
+| `--config` | Path to the JSON config (see below) |
+| `--output-path` | Base output directory. Files are written to `<output-path>/batch-<batch-id>/` |
 
-#### Synthesize Custom Text
+Reference audio paths in the config are resolved relative to the **current working directory** first, then relative to the **config file's directory**. Run from the repo root and use paths like `input/speaker/...`.
 
-Replace the default test sentence with your own text. The output will be saved as `output.wav`:
+## The config file
+
+A minimal single-speaker config (`input/config-single-speaker.json`):
+
+```json
+{
+  "batch-id": 16,
+  "texts": {
+    "content": "She reveals that her own history cultivated this pervasive need for perfection.",
+    "chunk-policy": "Sentence"
+  },
+  "steps": 25,
+  "alpha": 0.35,
+  "beta": 0.5,
+  "embedding-scale": 1.3,
+  "references": {
+    "id": "julia-whelan-single",
+    "tags": { "gender": "Female", "tone": "calm,engaging", "age": "30s", "usage": "audiobooks" },
+    "speakers": [
+      {
+        "name": "Julia Whelan",
+        "paths": ["input/speaker/real/Julia Whelan_000105-000115.wav"],
+        "sample-prosody-index": -1,
+        "timbre-weight": 1,
+        "prosody-weight": 1
+      }
+    ]
+  },
+  "max-tokens": 450,
+  "crossfade-ms": 50,
+  "normalize": true,
+  "pronunciation-dict": "pronunciation_dict.json",
+  "debug-chunks": true
+}
+```
+
+### Top-level parameters
+
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `batch-id` | int / string | yes | Output folder name: `batch-<batch-id>/` |
+| `texts.content` | string | yes | The text to speak |
+| `texts.chunk-policy` | `"Sentence"` \| `"Token"` | yes | How long text is split (see [Chunking](#chunking)) |
+| `steps` | int | yes | Diffusion steps. More = better quality, slower. 5 is fast; 20–35 is high quality |
+| `alpha` | float 0–1 | yes | **Timbre** (who is speaking). `0` = 100% reference timbre, `1` = fully generated |
+| `beta` | float 0–1 | yes | **Prosody** (how they speak: rhythm, intonation, accent). `0` = 100% reference prosody, `1` = fully generated |
+| `embedding-scale` | float | yes | Classifier-free guidance for the style. Higher = more expressive/emotional (typical 1.0–2.0) |
+| `references` | object | yes | The voice(s) to use (see below) |
+| `max-tokens` | int | yes | Max phoneme tokens per chunk in `Token` mode (model limit is 512; 450 leaves headroom) |
+| `crossfade-ms` | int | yes | Crossfade between chunks when joining them |
+| `normalize` | bool | yes | Expand abbreviations (`Dr.` → Doctor), percentages, ordinals (`1st`–`12th`) and currency (`$100`) before phonemizing |
+| `pronunciation-dict` | string \| null | yes | Path to a pronunciation dictionary. `null` uses `pronunciation_dict.json` next to the script |
+| `debug-chunks` | bool | yes | Save each chunk's WAV and metadata in a `_debug` folder |
+| `tts-seed`, `tts-noise`, `tts-cuda` | int \| null | no | Random seeds. Leave out (or `null`) to generate new ones; set all three to reproduce a previous result. Must be all set or all null |
+| `consistent-across-chunks` | bool | no (default `true`) | `true`: same seeds for every chunk (one consistent voice). `false`: new seeds per chunk (useful for exploring variations) |
+
+### `references`
+
+| Key | Description |
+|---|---|
+| `id` | Name used in output filenames. Use a new id per voice, otherwise runs can be skipped (see [Output](#output)) |
+| `tags` | Free-form notes for yourself (gender, tone, age, usage). Not used by synthesis |
+| `speakers` | List of one or more speakers |
+
+Each speaker:
+
+| Key | Description |
+|---|---|
+| `name` | Display name (logs only) |
+| `paths` | One or more reference WAV files of **this** speaker. Timbre is always averaged across all of them |
+| `sample-prosody-index` | `-1` = average prosody across all `paths`; `0..n-1` = take prosody from that one file only |
+| `timbre-weight` | Relative weight of this speaker's timbre when blending speakers |
+| `prosody-weight` | Relative weight of this speaker's prosody when blending speakers |
+
+### How the voice is built
+
+1. For each speaker, every file in `paths` is loaded at 24 kHz, silence-trimmed, and encoded into a 256-dim style vector: 128 dims of **timbre** + 128 dims of **prosody**.
+2. Timbre is averaged across the speaker's files; prosody is averaged or taken from `sample-prosody-index`.
+3. Speakers are blended: weights are normalized to sum to 1 (so `2` and `1` means 67% / 33%), and timbre and prosody are blended **separately**. A weight of `0` removes that speaker from that half.
+4. During synthesis, the diffusion model samples a new style, and `alpha` / `beta` mix it with the reference timbre / prosody.
+
+**Single speaker** — one entry in `speakers`; the weights don't matter (use `1`/`1`).
+
+**Mixing speakers** — e.g. timbre mostly from Julia, prosody mostly from heart:
+
+```json
+"speakers": [
+  { "name": "Julia Whelan", "paths": ["input/speaker/real/Julia Whelan_000105-000115.wav"],
+    "sample-prosody-index": -1, "timbre-weight": 2, "prosody-weight": 1 },
+  { "name": "heart", "paths": ["input/speaker/kokoro/heart.wav"],
+    "sample-prosody-index": -1, "timbre-weight": 1, "prosody-weight": 2 }
+]
+```
+
+**Voice + emotion** — use the emotion clip as a second speaker with `timbre-weight: 0`, so it only contributes prosody:
+
+```json
+"speakers": [
+  { "name": "Gavin", "paths": ["StyleTTS2/Demo/reference_audio/Gavin.wav"],
+    "sample-prosody-index": -1, "timbre-weight": 1, "prosody-weight": 3 },
+  { "name": "amused", "paths": ["StyleTTS2/Demo/reference_audio/amused.wav"],
+    "sample-prosody-index": -1, "timbre-weight": 0, "prosody-weight": 7 }
+]
+```
+
+### Chunking
+
+The model accepts at most 512 phoneme tokens per pass, so long text is split and the pieces are joined with a crossfade (`crossfade-ms`).
+
+- **`Sentence`** — every sentence (split on `.`, `!`, `?`) becomes its own chunk; `max-tokens` is ignored. A single sentence longer than 512 tokens fails.
+- **`Token`** — sentences are packed into chunks up to `max-tokens` tokens.
+
+### Pronunciation dictionary
+
+`pronunciation_dict.json` maps whole words (case-insensitive) to respellings applied before phonemizing:
+
+```json
+{
+  "comment": "...",
+  "dictionary": {
+    "data": "day-ta",
+    "minute": "min-it"
+  }
+}
+```
+
+### Choosing alpha / beta
+
+| Goal | alpha | beta |
+|---|---|---|
+| Closest to the reference (cloning) | 0.0 | 0.0 |
+| Similar, with natural variation (recommended) | 0.1–0.3 | 0.2–0.5 |
+| Reference voice, generated speaking style (reduce accent) | 0.0 | 0.8–1.0 |
+| Generated voice, reference speaking style | 1.0 | 0.0 |
+| New voice loosely inspired by the reference | 0.5+ | 0.9+ |
+
+For human-like quality: `steps` 20–35, `embedding-scale` 1.3–2.0, `alpha` 0.2–0.35, `beta` 0.5–0.8.
+
+## Output
+
+For each run, in `<output-path>/batch-<batch-id>/`:
+
+```
+<id>_<score>_a<alpha>_b<beta>_s<steps>_es<embedding-scale>.wav
+```
+
+e.g. `julia-whelan-single_6.0_a0.35_b0.5_s25_es1.3.wav`. `<score>` is the TTS quality score (0–10) from `analyze_voice.py`.
+
+Next to it:
+
+- with `debug-chunks: true` — a `<same name>_debug/` folder containing `chunk_<n>.wav`, `chunks_info.json` (text, tokens, duration and seeds per chunk), `<name>_analysis.json` and `<name>_config.json`
+- with `debug-chunks: false` — `details/<name>_analysis.json` and `details/<name>_config.json`
+
+The saved `_config.json` is your config plus the seeds that were actually used — run it again with `--config` to reproduce the exact same audio. (Delete or move the existing WAV first, or change the `id` / `batch-id`.)
+
+**Skipping:** if a WAV for the same `batch-id`, `id`, `alpha`, `beta`, `steps` and `embedding-scale` already exists (any score), the run is skipped. Change one of them, or delete the old file, to regenerate.
+
+## Batch runs (parameter grid)
+
+`batch_inference.py` runs every combination of several values and calls `inference_local.py` for each:
 
 ```bash
-# Synthesize your custom text using the first available reference audio
-DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
-python inference_local.py --text "Your custom text here"
+python batch_inference.py --config input/batch-config.json --output-path input/generated --workers 4
 ```
 
-#### Specify Output File
+The batch config has the same keys as the single config, except these are **arrays**:
 
-Control where the synthesized audio is saved by specifying a custom output filename:
+- `alpha`, `beta`, `steps`, `embedding-scale` — lists of values
+- `references` — list of reference objects (each with its own `id` and `speakers`)
 
-```bash
-# Synthesize text and save to a custom filename instead of default 'output.wav'
-DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
-python inference_local.py --text "Hello world" --output my_audio.wav
+```json
+"steps": [5, 25],
+"alpha": [0.1, 0.3],
+"beta": [0.3, 0.7],
+"embedding-scale": [1, 1.3],
+"references": [ { "id": "julia", "speakers": [ ... ] }, { "id": "heart", "speakers": [ ... ] } ]
 ```
 
-#### Use Specific Reference Audio
+That example produces 2 × 2 × 2 × 2 × 2 = 32 files. `--workers` defaults to 75% of the CPU cores (max 16). The batch stops at the first failure. Seeds and `consistent-across-chunks` are passed through to every run.
 
-Choose a specific reference audio file to clone the voice from, instead of using the first file found:
+## Helper scripts
 
-```bash
-# Use a specific reference audio file to clone that speaker's voice
-DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
-python inference_local.py \
-  --text "Your text here" \
-  --reference StyleTTS2/Demo/reference_audio/1221-135767-0014.wav
-```
+| Script | Purpose |
+|---|---|
+| `get-wav-sample.sh <video> <start> <end>` | Cut a clip from a video/audio file and clean it into a 24 kHz mono WAV ready to use as a reference |
+| `find-best-segments.py <audio> [-d 10] [-n 5] [-s out_dir] [--speaker name]` | Scan long audio for the cleanest segments (lowest jitter/shimmer) and optionally save them |
+| `analyze_voice.py <wav> [-t text] [-o out.json]` | Acoustic analysis, quality scores and derived tags (see `VOICE_ANALYSIS.md`, `JITTER_SHIMMER.md`) |
+| `select-best-voices.py --input <batch-folder> --output <dir>` | Go through the `_debug` folders of a batch, analyze each chunk and write a reproducible config per chunk |
+| `whisper-transcribe.py --media-file <file> [--model base]` | Transcribe a reference clip with Whisper |
+| `list_speakers.py` | List the StyleTTS2 demo reference voices |
+| `run_ui.py` | Gradio UI on http://localhost:7860 (needs `requirements-gradio.txt`; see `GRADIO_UI_SETUP.md`) |
 
-#### Combine Speaker Voice with Emotion
+## Reference audio tips
 
-You can combine a specific speaker's voice with an emotion! This allows you to have, for example, Gavin's voice speaking with an amused tone, or Nima's voice with anger.
+StyleTTS2 is zero-shot: a few seconds of audio is enough, no training.
 
-**How it works:**
-- `--reference`: Sets the speaker's voice (timbre/identity)
-- `--emotion`: Sets the emotion/prosody (how they speak)
-- The system keeps the speaker's voice but applies the emotion's prosody
+- WAV, at least 4–5 s of clear speech; 10–30 s is better
+- One speaker, natural speech, little background noise
+- Any sample rate works (it is resampled to 24 kHz); `get-wav-sample.sh` produces the ideal format
+- Several clips of the same speaker in `paths` give a more stable voice than one clip
+- Use reference audio with the emotion you want, or blend an emotion clip in via prosody
 
-**Basic usage:**
-```bash
-# Use Gavin's voice with an amused emotion
-DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
-python inference_local.py \
-  --text "That's absolutely hilarious!" \
-  --reference StyleTTS2/Demo/reference_audio/Gavin.wav \
-  --emotion StyleTTS2/Demo/reference_audio/amused.wav
-```
+It is not perfect cloning, but good reference audio with low `alpha`/`beta` gets very close. The model was trained on LibriTTS (English), so generated prosody leans toward that style.
 
-**Available emotions:**
-- `amused.wav` - Cheerful, amused tone
-- `anger.wav` - Angry, aggressive tone
-- `disgusted.wav` - Disgusted, repulsed tone
-- `sleepy.wav` - Tired, sleepy tone
-
-**Control emotion strength:**
-Use `--emotion-blend` to control how much emotion is applied. **Default: 0.7** (70% emotion prosody, 30% speaker prosody). Range: 0.0-1.0.
-
-**Note:** If you use `--emotion` without specifying `--emotion-blend`, it defaults to 0.7, meaning the output will use 70% of the emotion's prosody and 30% of the speaker's natural prosody, while keeping the speaker's voice timbre.
-
-```bash
-# Subtle emotion (20% emotion blend)
-DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
-python inference_local.py \
-  --text "That's interesting." \
-  --reference StyleTTS2/Demo/reference_audio/Gavin.wav \
-  --emotion StyleTTS2/Demo/reference_audio/amused.wav \
-  --emotion-blend 0.2
-
-# Strong emotion (90% emotion blend)
-DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
-python inference_local.py \
-  --text "I'm absolutely furious!" \
-  --reference StyleTTS2/Demo/reference_audio/Nima.wav \
-  --emotion StyleTTS2/Demo/reference_audio/anger.wav \
-  --emotion-blend 0.9
-```
-
-**More examples:**
-```bash
-python inference_local.py \
-  --text-file my_long_text.txt \
-  --output output.wav \
-  --reference speaker.wav \
-  --emotion emotion.wav \
-  --alpha 0.3 \
-  --beta 0.7 \
-  --steps 5 \
-  --max-tokens 450 \
-  --crossfade-ms 50 \
-  --debug-chunks --chunk-by-sentences
-  
-# High quality emotional speech params if you like to use
-  --emotion StyleTTS2/Demo/reference_audio/amused.wav \
-  --emotion-blend 0.8 \
-  --embedding-scale 1.5 
-```
-
-#### Create new Speakers with different alpha and beta
-
-Create completely new voices that never existed by twining alpha and beta based on the reference speakers! In `input`
-dir it expects nested `speakers` folder, inside that for all the wav files it will do the process. Better to have one
-file there as a reference, then it will create 16 different files for the reference with different alpha and beta.
-
-**Basic usage:**
-```bash
-# In the ip
- python all-alpha-beta-batch_tts.py \
-  --input-dir ./input \
-  --text-file ./input/text1.txt \
-  --output-dir ./input/generated  
-```
-
-**Key benefits:**
-- ✅ Creates unique voices (not clones)
-- ✅ Teh identifier of each created speaker is not the created voice, instead it is the reference voice with the used parameters
-  suck as alpha and beta values. The created voice is just for the checking and listening to the final voice.
-
-#### Adjust Voice Characteristics
-
-Control how similar the synthesized voice is to the reference speaker:
-
-```bash
-# More similar to reference (less variation)
-# Uses 90% reference timbre and 70% reference prosody - sounds very close to the reference speaker
-DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
-python inference_local.py \
-  --text "Your text" \
-  --alpha 0.1 \
-  --beta 0.3
-
-# More diverse (less similar to reference)
-# Uses 50% reference timbre and 5% reference prosody - more variation but less similar to reference
-# Uses 10 diffusion steps for higher quality (slower but better sound)
-DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
-python inference_local.py \
-  --text "Your text" \
-  --alpha 0.5 \
-  --beta 0.95 \
-  --steps 10
-```
-
-#### All Available Options
-
-```bash
-python inference_local.py --help
-```
-
-Available options (with default values):
-
-**Required/Optional Parameters:**
-- `--text TEXT`: Text to synthesize  
-  **Default:** `"Hello, this is a test of StyleTTS2 text to speech synthesis."`
-
-- `--reference REFERENCE`: Path to reference audio file for speaker voice  
-  **Default:** `None` (uses first WAV file found in `StyleTTS2/Demo/reference_audio/`)
-
-- `--emotion EMOTION`: Path to reference audio file for emotion/prosody (optional, blends with --reference)  
-  **Default:** `None` (no emotion blending)
-
-- `--output OUTPUT`: Output audio file path  
-  **Default:** `output.wav`
-
-**Voice Control Parameters:**
-- `--alpha ALPHA`: Timbre control: 0=reference, 1=sampled  
-  **Default:** `0.3`
-
-- `--beta BETA`: Prosody control: 0=reference, 1=sampled  
-  **Default:** `0.7`
-
-- `--emotion-blend BLEND`: Emotion blend ratio: 0=only speaker prosody, 1=only emotion prosody  
-  **Default:** `0.7` (70% emotion, 30% speaker)
-
-**Quality Parameters:**
-- `--steps STEPS`: Number of diffusion steps (more = better quality but slower)  
-  **Default:** `5`
-
-- `--embedding-scale SCALE`: Embedding scale for style  
-  **Default:** `1.0`
-
-**Synthetic Speaker Parameters:**
-- `--synthetic-speakers SPEAKERS`: List of reference audio paths to create a synthetic speaker (averages embeddings from multiple speakers)  
-  **Default:** `None` (uses single speaker mode)
-
-- `--noise-scale SCALE`: Noise scale for synthetic speaker  
-  **Default:** `0.05`  
-  **See:** [Synthetic Speaker Guide](SYNTHETIC_SPEAKER.md) for detailed explanation
-
-- `--predictor-from PATH`: Path to audio file to use for predictor embedding in synthetic speaker  
-  **Default:** `None` (averages predictor embeddings from all speakers)
-
-### Example Commands
-
-Ready-to-use examples for common scenarios:
-
-```bash
-# Example 1: Basic synthesis with custom text
-# Synthesizes the given text using default settings (alpha=0.3, beta=0.7, steps=5)
-# Output saved to: output.wav
-DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
-python inference_local.py --text "This is a test of text to speech synthesis."
-
-# Example 2: High quality synthesis (more diffusion steps)
-# Uses 10 diffusion steps instead of 5 for better quality (takes ~2x longer)
-# Output saved to: high_quality.wav
-DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
-python inference_local.py \
-  --text "This will take longer but sound better" \
-  --steps 10 \
-  --output high_quality.wav
-
-# Example 3: Very similar to reference speaker
-# Uses 100% reference timbre (alpha=0) and 90% reference prosody (beta=0.1)
-# Result sounds almost identical to the reference speaker with minimal variation
-DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
-python inference_local.py \
-  --text "This will sound very similar to the reference" \
-  --alpha 0.0 \
-  --beta 0.1
-
-# Example 4: Maximum diversity (very different from reference)
-# Uses 0% reference timbre and prosody - generates a completely different voice
-# Useful for exploring voice variations
-DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
-python inference_local.py \
-  --text "This will sound very different from the reference" \
-  --alpha 1.0 \
-  --beta 1.0 \
-  --steps 10
-
-# Example 5: Emotional/expressive speech
-# Higher embedding scale makes the speech more emotional and expressive
-# Good for dramatic readings or emotional content
-DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
-python inference_local.py \
-  --text "I can't believe this amazing discovery!" \
-  --embedding-scale 2.0 \
-  --steps 10 \
-  --output emotional.wav
-
-# Example 6: Speaker voice with emotion
-# Combine Gavin's voice with an amused emotion
-DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
-python inference_local.py \
-  --text "That's absolutely hilarious!" \
-  --reference StyleTTS2/Demo/reference_audio/Gavin.wav \
-  --emotion StyleTTS2/Demo/reference_audio/amused.wav \
-  --output gavin_amused.wav
-
-# Example 7: Strong emotion with specific speaker
-# Nima's voice with strong anger emotion
-DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
-python inference_local.py \
-  --text "I'm absolutely furious about this!" \
-  --reference StyleTTS2/Demo/reference_audio/Nima.wav \
-  --emotion StyleTTS2/Demo/reference_audio/anger.wav \
-  --emotion-blend 0.9 \
-  --steps 15 \
-  --output nima_angry.wav
-```
-
-### Best Settings for Human-Like Quality
-
-For the most natural and human-like speech synthesis, use these recommended parameters:
-
-```bash
-# Best settings for human-like quality:
---steps 20-35          # More steps = better quality (slower)
---embedding-scale 1.5-2.0  # More expressive/emotional
---alpha 0.2-0.3       # Keep reference timbre
---beta 0.6-0.8        # Keep reference prosody
-```
-
-**Example command:**
-```bash
-DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
-python inference_local.py \
-  --text "This is a test of high quality text to speech." \
-  --steps 25 \
-  --embedding-scale 1.8 \
-  --alpha 0.25 \
-  --beta 0.7 \
-  --output high_quality.wav
-```
-
-**Performance Notes:**
-- **First run (CPU/Mac)**: ~10 seconds total (includes ~8s model loading + ~2s synthesis)
-- **Subsequent runs (CPU/Mac)**: ~2-4 seconds for a short sentence (5-10 words) with 25 steps
-- **Real-time factor**: ~0.7x (faster than real-time on CPU!)
-- **GPU**: ~1-3 seconds for the same text (if available)
-- Longer texts take proportionally longer
-- More steps = better quality but slower processing (25 steps is a good balance)
-
-### Inference Parameters
-
-The `inference()` function accepts several parameters:
-
-- `diffusion_steps`: Number of diffusion steps (default: 5, range: 5-35+)
-- `alpha`: Timbre control (0=reference, 1=sampled, default: 0.3)
-- `beta`: Prosody control (0=reference, 1=sampled, default: 0.7)
-- `embedding_scale`: Embedding scale for style (default: 1, range: 0.5-3.0)
-
-#### Parameter Settings
-
-**Similar to reference** (`alpha=0.1, beta=0.3`):
-- Uses 90% of reference timbre and 70% of reference prosody
-- More similar to reference speaker, less diverse
-
-**More diverse** (`alpha=0.5, beta=0.95`):
-- Uses 50% of reference timbre and 5% of reference prosody
-- More diverse, but less similar to reference
-
-**Extreme** (`alpha=1, beta=1`):
-- Uses 0% of reference timbre and prosody
-- Very dissimilar to reference speaker
-
-**No variation** (`alpha=0, beta=0`):
-- Uses 100% of reference timbre and prosody
-- Very similar to reference, no variation
-
-## Listing Available Speakers
-
-To see all available reference audio files (speakers and emotions), run:
-
-```bash
-python list_speakers.py
-```
-
-This will show you:
-- Named speakers (Gavin, Nima, Vinay, Yinghao)
-- Emotion samples (amused, anger, disgusted, sleepy)
-- Numbered samples
-- LibriTTS dataset samples
-
-## Adding Your Own Voice (Zero-Shot Voice Cloning)
-
-StyleTTS2 supports **zero-shot voice cloning**, which means you can clone voices with just a few seconds of audio - no 30-minute training required! Unlike traditional TTS cloud platforms that need extensive fine-tuning, StyleTTS2 extracts voice characteristics directly from a short reference sample.
-
-### How It Works
-
-StyleTTS2 uses reference audio to extract:
-- **Timbre** (voice characteristics - who is speaking)
-- **Prosody** (speaking style - how they speak)
-
-The similarity to your reference voice depends on:
-1. **Reference audio quality and length**
-2. **Alpha/Beta parameters** (control how closely to match the reference)
-
-### Reference Audio Requirements
-
-**Minimum requirements:**
-- Format: WAV
-- Duration: At least 4-5 seconds of clear speech
-- Sample rate: 24000 Hz (auto-resampled if different)
-- Quality: Clear speech with minimal background noise
-
-**Recommended for best results:**
-- Duration: 10-30 seconds (longer is better, but not required)
-- Natural, conversational speech
-- Single speaker (no overlapping voices)
-- Minimal background noise
-
-### Voice Cloning vs. Voice Similarity
-
-StyleTTS2 can produce voices that are:
-- **Very similar** (close to cloning) with `alpha=0.0, beta=0.0`
-- **Similar with variation** (recommended) with `alpha=0.1-0.3, beta=0.2-0.4`
-- **Loosely inspired** with higher alpha/beta values
-
-**Note:** It's not perfect cloning, but can achieve very high similarity with good reference audio and proper settings.
-
-### Examples
-
-**Maximum similarity (closest to cloning):**
-```bash
-DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
-python inference_local.py \
-  --text "This will sound very similar to my voice" \
-  --reference /path/to/your_voice.wav \
-  --alpha 0.0 \      # 100% reference timbre (voice characteristics)
-  --beta 0.0 \       # 100% reference prosody (speaking style)
-  --steps 20 \       # Higher quality
-  --output cloned_voice.wav
-```
-
-**Similar with natural variation (recommended):**
-```bash
-DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
-python inference_local.py \
-  --text "This will sound like me but with some natural variation" \
-  --reference /path/to/your_voice.wav \
-  --alpha 0.1 \      # 90% reference timbre, 10% variation
-  --beta 0.2 \       # 80% reference prosody, 20% variation
-  --steps 20 \
-  --output similar_voice.wav
-```
-
-**Using a custom voice from anywhere:**
-```bash
-# You can use any WAV file on your system
-DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
-python inference_local.py \
-  --text "Hello, this is my custom voice!" \
-  --reference ~/Downloads/my_voice_sample.wav \
-  --output custom_output.wav
-```
-
-### Common Alpha/Beta Combinations
-
-**100% reference timbre, 0% reference prosody** (your voice, but with generated speaking style):
-```bash
-DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
-python inference_local.py \
-  --text "This uses your exact voice but with generated prosody" \
-  --reference /path/to/your_voice.wav \
-  --alpha 0.0 \      # 100% reference timbre (your voice)
-  --beta 1.0 \       # 0% reference prosody (generated speaking style)
-  --steps 20 \
-  --output voice_only.wav
-```
-
-**0% reference timbre, 100% reference prosody** (different voice, but same speaking style):
-```bash
-DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
-python inference_local.py \
-  --text "This uses generated voice but your speaking style" \
-  --reference /path/to/your_voice.wav \
-  --alpha 1.0 \      # 0% reference timbre (generated voice)
-  --beta 0.0 \       # 100% reference prosody (your speaking style)
-  --steps 20 \
-  --output prosody_only.wav
-```
-
-**100% reference timbre, 100% reference prosody** (maximum cloning):
-```bash
-DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
-python inference_local.py \
-  --text "This is closest to perfect cloning" \
-  --reference /path/to/your_voice.wav \
-  --alpha 0.0 \      # 100% reference timbre
-  --beta 0.0 \       # 100% reference prosody
-  --steps 20 \
-  --output cloned.wav
-```
-
-**Parameter Reference:**
-- `alpha`: Controls **timbre** (voice characteristics)
-  - `0.0` = 100% reference timbre
-  - `1.0` = 0% reference timbre (fully generated)
-- `beta`: Controls **prosody** (speaking style)
-  - `0.0` = 100% reference prosody
-  - `1.0` = 0% reference prosody (fully generated)
-
-### Removing Accent and Speaking Style
-
-If you want to keep your voice but remove your accent and speaking style:
-
-```bash
-DYLD_LIBRARY_PATH="/opt/homebrew/Cellar/espeak/1.48.04_1/lib:$DYLD_LIBRARY_PATH" \
-python inference_local.py \
-  --text "This uses your voice but with generated prosody (no accent/style)" \
-  --reference /path/to/your_voice.wav \
-  --alpha 0.0 \      # 100% reference timbre (your voice)
-  --beta 1.0 \       # 0% reference prosody (generated, removes accent/style)
-  --steps 20 \
-  --output voice_no_accent.wav
-```
-
-**How it works:**
-- **Accent** and **speaking style** are both part of **prosody** (how you speak)
-- By setting `beta = 1.0`, you use generated prosody instead of your reference prosody
-- This should reduce or remove your accent and speaking style while keeping your voice timbre
-
-**Important limitations:**
-- **Not perfect accent removal**: The model was trained on LibriTTS (English dataset), so it may still have some accent bias from the training data
-- **Pronunciation**: Uses espeak-ng for phonemization, which handles standard pronunciation, but generated prosody may still reflect training patterns
-- **Result**: Your voice with generated prosody - should sound less accented than your reference, but may not be completely neutral
-
-**For best results:**
-- Use clear, high-quality reference audio
-- Try different `beta` values (0.8-1.0) to find the right balance
-- Increase `steps` (20-30) for better quality
-- The generated prosody will be influenced by the model's training data (LibriTTS English speakers)
-
-### Tips for Best Results
-
-1. **Record clear audio**: Use a good microphone in a quiet environment
-2. **Speak naturally**: Don't over-enunciate or speak unnaturally
-3. **Use longer samples**: 10-30 seconds gives better results than 4-5 seconds
-4. **Match the emotion**: If you want emotional speech, use reference audio with that emotion
-5. **Experiment with parameters**: Try different alpha/beta values to find the best balance
-
-### Comparison with Cloud TTS Platforms
-
-| Feature | StyleTTS2 | Traditional Cloud TTS |
-|---------|-----------|----------------------|
-| **Training time** | None (zero-shot) | 30+ minutes |
-| **Reference audio needed** | 4-30 seconds | 30+ minutes |
-| **Voice similarity** | Very similar to similar | Perfect cloning |
-| **Setup** | Local, free | Cloud, paid |
-| **Privacy** | Fully local | Data sent to cloud |
-
-## Project Structure
+## Project structure
 
 ```
 create-voice/
-├── setup.sh                 # Setup script
-├── inference_local.py       # Main inference script
-├── list_speakers.py         # List available speakers/emotions
-├── requirements.txt         # Python dependencies
-├── README.md               # This file
-├── EMOTION_EXAMPLES.md     # Detailed emotion usage examples
-├── FIX_INSTRUCTIONS.md     # Fix for NaN errors
-├── inference_fix.py        # Helper functions for fixes
-└── StyleTTS2/             # Cloned StyleTTS2 repository
-    ├── Models/
-    ├── Modules/
-    ├── Utils/
-    └── Demo/
-        └── reference_audio/
+├── inference_local.py        # Main config-driven TTS script
+├── batch_inference.py        # Parameter-grid runner
+├── analyze_voice.py          # Voice analysis and quality score
+├── select-best-voices.py     # Pick and save chunks from batch debug folders
+├── find-best-segments.py     # Find clean reference segments in long audio
+├── get-wav-sample.sh         # Cut a reference clip with ffmpeg
+├── whisper-transcribe.py     # Transcription
+├── list_speakers.py          # List demo reference voices
+├── run_ui.py, ui/            # Gradio UI
+├── pronunciation_dict.json   # Word respellings
+├── input/
+│   ├── config.json           # Example single-run config (multi-speaker blend)
+│   ├── batch-config.json     # Example batch config
+│   ├── speaker/              # Your reference WAVs (not in git)
+│   └── generated/            # Output (not in git)
+└── StyleTTS2/                # Cloned StyleTTS2 repo + model (not in git)
 ```
 
 ## Troubleshooting
 
-### NaN Errors
-
-If you encounter NaN errors during inference, see `FIX_INSTRUCTIONS.md` for solutions. The `inference_local.py` script already includes fixes for common NaN issues.
-
-### Model Not Found
-
-If you get errors about missing model files:
-1. Ensure you've downloaded the model checkpoint
-2. Check that the path in `inference_local.py` matches your file location
-3. Update `MODEL_PATH` in the script if needed
-
-### Reference Audio Issues
-
-If reference audio doesn't work:
-1. Verify the audio file is valid (try playing it)
-2. Check that the file is in WAV format
-3. Ensure the audio is at least 4 seconds long
-4. Check sample rate (should be 24000 Hz)
-
-### Device Issues
-
-The script automatically detects CUDA availability. To force CPU usage, modify:
-
-```python
-device = 'cpu'  # Force CPU
-```
-## Whisper transcription
-```bash
-python whisper-transcribe.py --media-file input/speaker/Julia\ Whelan_000105-000115.wav
-```
-## Notes
-
-- The first run may take longer as models are loaded
-- GPU acceleration significantly speeds up inference
-- Reference audio should be clear and at least a few seconds long
-- The output audio is saved as 24kHz WAV files
+- **`Error importing StyleTTS2 modules`** — `StyleTTS2/` is missing next to the script; run `./setup.sh`.
+- **`Reference audio file not found`** — run from the repo root, or make the path relative to the config file.
+- **`Output already exists, skipping synthesis`** — see [Output](#output).
+- **`Text chunk is too long`** — a chunk is over 512 tokens: use `"chunk-policy": "Token"` or split the long sentence.
+- **`Invalid duration prediction`** (NaN) — usually bad reference audio; try a cleaner or longer clip.
+- **phonemizer / espeak errors** — check the espeak path at the top of `inference_local.py`.
+- **Device** — CUDA is used if available, otherwise CPU. On a Mac CPU a 13 s sentence at 25 steps takes ~8 s plus model loading.
 
 ## References
 
 - [StyleTTS2 Repository](https://github.com/yl4579/StyleTTS2)
-- [StyleTTS2 HuggingFace](https://huggingface.co/yl4579/StyleTTS2-LibriTTS)
+- [StyleTTS2 on Hugging Face](https://huggingface.co/yl4579/StyleTTS2-LibriTTS)
 - [Original Inference Notebook](https://github.com/yl4579/StyleTTS2/blob/main/Demo/Inference_LibriTTS.ipynb)
-

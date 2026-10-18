@@ -1,0 +1,36 @@
+{
+  "batch-id": 16,
+  "texts": {
+	"content": "She reveals that her own history cultivated this pervasive need for perfection, watching it consumes chunks of her life under the false promise that the resulting success would justify the losses.",
+	"chunk-policy": "Sentence"
+  },
+  "steps": 25,
+  "alpha": 0.35,
+  "beta": 0.5,
+  "embedding-scale": 1.3,
+  "references": {
+	"id": "she-motivation-single",
+	"tags": {
+	  "gender": "Female",
+	  "tone": "engaging",
+	  "age": "30s",
+	  "usage": "youtube"
+	},
+	"speakers": [
+	  {
+		"name": "she-motivation",
+		"paths": [
+		  "input/speaker/real/she-motivation_000025-000038.wav"
+		],
+		"sample-prosody-index": -1,
+		"timbre-weight": 1,
+		"prosody-weight": 1
+	  }
+	]
+  },
+  "max-tokens": 450,
+  "crossfade-ms": 50,
+  "normalize": true,
+  "pronunciation-dict": "pronunciation_dict.json",
+  "debug-chunks": true
+}

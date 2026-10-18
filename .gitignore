@@ -1,8 +1,12 @@
 # Ignore StyleTTS2 directory
 StyleTTS2/
 
-# Ignore audio output files
+# Ignore audio files
 *.wav
+*.mp3
+
+# Ignore generated output
+input/generated/
 
 # Ignore IDE files
 .idea/
